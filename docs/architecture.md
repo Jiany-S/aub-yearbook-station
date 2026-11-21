@@ -119,3 +119,11 @@ The public source/release contains no real student records, photos, or database.
 Runtime workspaces and backups are private local artifacts. This release has no
 network sync, analytics, authentication, or student gallery. The UUID-based
 session/asset manifest will support a later authenticated selection platform.
+
+## Windows packaging
+
+Binary discovery runs with a restricted PATH containing the selected Python
+installation and Windows system folders. This prevents unrelated installed tools
+from supplying an incompatible ICU or UCRT DLL. MSVC runtime copies bundled with
+Python/Qt are aligned to the newest bundled version before packaging. The portable
+and installed application both run the synthetic self-test in the release workflow.
