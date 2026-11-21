@@ -1,0 +1,75 @@
+name: Windows tests and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-build.lock
+      - name: Install locked dependencies and project
+        run: |
+          python -m pip install -r requirements-build.lock
+          python -m pip install --no-deps --no-build-isolation -e .
+      - name: Test backend and operator interface
+        run: python -m pytest -q
+      - name: Ensure no private runtime data is tracked
+        run: python tools/check_public_tree.py
+      - name: Package Windows application and installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed" }
+          }
+          ./tools/build_windows.ps1 -Python python -Installer
+      - name: Test portable application without a Python command
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP "portable-smoke.json"
+          $app = Start-Process -FilePath ./dist/AUBYearbookStation/AUBYearbookStation.exe -ArgumentList '--self-test','--report',"`"$report`"" -Wait -PassThru -WindowStyle Hidden
+          if ($app.ExitCode -ne 0 -or -not (Test-Path $report)) { throw "Packaged app smoke test failed" }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if (-not $result.passed) { throw "Packaged app reported a failure" }
+      - name: Test installer and installed application
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem ./dist-assets/*-Setup.exe | Select-Object -First 1
+          $installDir = Join-Path $env:RUNNER_TEMP "YearbookInstall"
+          $installer = Start-Process -FilePath $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=`"$installDir`"" -Wait -PassThru -WindowStyle Hidden
+          if ($installer.ExitCode -ne 0) { throw "Installer failed" }
+          $report = Join-Path $env:RUNNER_TEMP "installed-smoke.json"
+          $app = Start-Process -FilePath "$installDir/AUBYearbookStation.exe" -ArgumentList '--self-test','--report',"`"$report`"" -Wait -PassThru -WindowStyle Hidden
+          if ($app.ExitCode -ne 0 -or -not (Test-Path $report)) { throw "Installed app smoke test failed" }
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: AUB-Yearbook-Station-Windows
+          path: dist-assets/*
+          if-no-files-found: error
+      - name: Publish preview release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem ./dist-assets -File | ForEach-Object FullName
+          gh release create $env:GITHUB_REF_NAME @files --title "AUB Yearbook Station $env:GITHUB_REF_NAME" --prerelease --notes-file packaging/RELEASE_NOTES.md

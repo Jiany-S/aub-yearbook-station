@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aub-yearbook-station"
+version = "0.2.0"
+description = "Local roster and capture workflow for AUB Campus Yearbook"
+requires-python = ">=3.11"
+dependencies = ["xlrd>=2.0.2,<3", "openpyxl>=3.1.5,<4", "Pillow>=11,<14", "tzdata>=2025.1"]
+
+[project.optional-dependencies]
+desktop = ["PySide6-Essentials>=6.8,<7"]
+dev = ["pytest>=8,<10", "pytest-qt>=4.4,<5"]
+package = ["pyinstaller>=6,<7"]
+
+[project.scripts]
+yearbook = "yearbook.__main__:main"
+
+[project.gui-scripts]
+aub-yearbook = "yearbook.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
