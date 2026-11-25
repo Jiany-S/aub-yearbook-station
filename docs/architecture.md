@@ -34,6 +34,9 @@ flowchart LR
 - `numbering.py` allocates durable general picture numbers shared across event
   workspaces in the same Windows user profile, with a separate demo ledger.
 - `gui.py` provides the operator screens and background file/import/export tasks.
+- `ui_theme.py` supplies a consistent light palette and explicit text colors so
+  Windows dark mode cannot hide labels against light controls.
+- `help_content.py` contains the built-in, numbered operator guide.
 - `archives.py` validates backups, restores to new folders, and consolidates station
   exports with checksums and an atomic JSON index commit.
 
@@ -96,6 +99,25 @@ the review outcome without erasing failed asset records.
 Qt locks prevent two app windows from opening the same workspace. Long-running
 file operations run in workers; session transitions and closing/switching
 workspaces are disabled while they run.
+
+## Operator interface
+
+The main window has Photoshoot, Students, and How to use tabs. History and event
+management are in a separate Manage dialog; restore and consolidation are under
+More backup options. First launch shows event setup followed by roster import,
+and status messages describe the next required action.
+
+The Photoshoot view displays one student at a time. Starting a session requires
+the identity checkbox. While active, student search and selection are disabled,
+and the identity card remains tied to the actual session. Editing a search clears
+the previous lookup and identity confirmation. Finishing clears the card and
+returns focus to search. These UI constraints supplement the backend's explicit
+session ownership for ingestion.
+
+Windows begin within the screen's available area. Scrollable content keeps
+controls reachable on smaller laptop screens. The theme specifies foregrounds,
+backgrounds, placeholders, table headers, and disabled states. The guide and
+isolated demo are available before importing any real student data.
 
 ## Archives
 

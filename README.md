@@ -11,7 +11,7 @@ to a camera or automatically assign files arriving in a watched folder.
 ## Install and launch
 
 1. Open [GitHub Releases](https://github.com/Jiany-S/aub-yearbook-station/releases).
-2. Download **AUBYearbookStation-0.3.0-Windows-x64-Setup.exe**.
+2. Download **AUBYearbookStation-0.4.0-Windows-x64-Setup.exe**.
 3. Run the setup and launch **AUB Yearbook Station** from the Start menu.
 
 Python and Microsoft Excel are not required. Installation is per Windows user
@@ -28,41 +28,47 @@ target. Current binaries and their SHA-256 checksums are attached to each releas
 ## First use
 
 The app starts with an **empty local workspace**. No student roster or photos are
-included. Open **Settings** to name the event and set the station code and operator.
+included. On **Photoshoot**, choose **Set up event** to name the event and set the
+station code and operator. Then choose **Import students**.
 
 - Import the official `.xls` or `.xlsx` roster in **Students**. Preview the import
   counts before committing it. If the workbook has multiple sheets, choose one.
-- In **Capture**, find the student by ID or username, check the details with them,
-  tick the confirmation box, then select **Start photographing**.
-- Use **Add selected photos** to copy JPEG, PNG, or TIFF files into the active
+- In **Photoshoot**, find the student by ID or username, check the details with
+  them, tick **These details match the student**, then select **Start session**.
+- Use **Add photos** to copy JPEG, PNG, or TIFF files into the active
   session. Originals stay untouched. Files are checksummed and named with student
   ID, username, local date/time, station code, session sequence, and a general
   picture number such as `_P000001`.
-- Select **Finish session** before starting another student. Looking up the next
-  student never changes the active student's assignment.
-- Create a provisional record for someone missing from the roster. Reconcile it
-  later through **Students**, or through a matching official roster import.
-- Use **History & review** for interrupted sessions, operator notes, and audited
+- Select **Finish and next student** before starting another student. Student
+  selection stays locked while a session is active.
+- Choose **Student not listed?** to create a temporary record for someone missing
+  from the roster. Use **Students → Match to student list** later, or import an
+  official roster containing an unambiguous matching identity.
+- Use **Manage → History** for interrupted sessions, operator notes, and audited
   identity corrections. Original filenames remain unchanged after a correction;
   database associations and the export manifest are authoritative.
 
-For practice, choose **Backup & workspace → Open separate demo workspace**. It
-contains five synthetic students (`demo1` through `demo5`). Start one and select
-**Generate 3 demo photos**. The event workspace stays separate and unchanged.
+The **How to use** tab contains a numbered guide covering setup, each student,
+backups, and common problems. For practice, choose **Try demo** there or on the
+first-launch screen. It contains five synthetic students (`demo1` through
+`demo5`). Start one and select **Add sample photos**. The event workspace stays
+separate and unchanged.
 
 ## Storage, backups, and multiple stations
 
 The default workspace is `%LOCALAPPDATA%\AUBYearbookStation\workspace`. Choose
-another folder through **Open workspace**. Keep active workspaces on a local disk,
+another folder through **Manage → Backups and event → Switch event folder**.
+Keep active workspaces on a local disk,
 outside the app installation directory. Each independent station needs its own
 workspace and station code. Do not share the SQLite database over a network drive.
 
-Use **Create verified backup ZIP** after finishing the active session. A backup
+Use **Manage → Backups and event → Save backup** after finishing the active session. A backup
 contains the database, original photo files, checksums, JSON manifest, and CSV
 summary. Save a copy to a separate drive. Backups contain student information and
 belong in the team's private storage, outside this public repository.
 
-**Restore backup** creates a new workspace and never replaces an existing one.
+Under **More backup options**, **Restore backup to a new folder** creates a new
+workspace and never replaces an existing one.
 **Combine station backups** keeps all sessions and photos, groups official
 students by AUB ID, and flags identity conflicts. Reimporting the same export is
 idempotent. Use the same event name at all stations, and supply the latest backup
@@ -119,5 +125,6 @@ CLI utilities are available through `yearbook --help`, including roster profilin
 import/lookup, backup restoration, and station consolidation. Profiling does not
 modify its input file. GUI import also tracks current event eligibility.
 
-See [architecture](docs/architecture.md), [release checklist](docs/release-checklist.md),
-and [third-party notices](THIRD_PARTY_NOTICES.md). Application source is MIT licensed.
+See [architecture](docs/architecture.md), [interface review](docs/ui-review.md),
+[release checklist](docs/release-checklist.md), and
+[third-party notices](THIRD_PARTY_NOTICES.md). Application source is MIT licensed.

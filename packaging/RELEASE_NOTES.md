@@ -1,10 +1,13 @@
 Windows preview of AUB Yearbook Station. Live camera integration is pending.
 
-New in 0.3.0: filenames now include a general picture number such as `_P000001`,
-incrementing across every student, session, and workspace in the same Windows
-user profile. Numbering persists across restarts and updates. Demo mode has an
-independent counter. Existing photos retain their filenames, and older databases
-upgrade automatically.
+New in 0.4.0: a simpler Photoshoot / Students / How to use interface, readable
+colors even when Windows uses dark mode, and smaller scrollable pages that fit
+laptop screens. First launch guides you through event setup and student import.
+History, backups, and advanced tools are under Manage. The built-in guide explains
+the workflow step by step. Student selection stays locked during each session.
+
+General picture numbering, existing event data, and backup compatibility are
+preserved. Close the old application before installing the update.
 
 Download **Windows-x64-Setup.exe** for the easiest installation. Run it, install
 for your Windows user, and launch **AUB Yearbook Station** from the Start menu.
