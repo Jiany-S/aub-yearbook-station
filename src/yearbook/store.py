@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from .roster import Roster, RosterValidationError, student_dict
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 BASE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS students (
     student_key TEXT PRIMARY KEY,
@@ -62,6 +62,10 @@ ALTER TABLE assets ADD COLUMN picture_number INTEGER CHECK(picture_number>0);
 ALTER TABLE assets ADD COLUMN numbering_machine_id TEXT;
 CREATE UNIQUE INDEX machine_picture_number ON assets(numbering_machine_id,picture_number);
 """
+PHOTO_FOLDER_SCHEMA = """
+ALTER TABLE sessions ADD COLUMN photo_directory TEXT;
+CREATE UNIQUE INDEX session_photo_directory ON sessions(photo_directory COLLATE NOCASE);
+"""
 
 
 def utc_now() -> str:
@@ -95,7 +99,7 @@ class RosterStore(AbstractContextManager):
         self.connection.execute("PRAGMA foreign_keys=ON")
         try:
             version = self.connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, SCHEMA_VERSION) or (read_only and version != SCHEMA_VERSION):
+            if version not in (0, 1, 2, 3, SCHEMA_VERSION) or (read_only and version != SCHEMA_VERSION):
                 raise RosterValidationError("Unsupported database version; open it with the desktop app to migrate it.")
             if not read_only:
                 if version == 0:
@@ -115,7 +119,9 @@ class RosterStore(AbstractContextManager):
                             "ALTER TABLE students ADD COLUMN provisional INTEGER NOT NULL DEFAULT 0 "
                             "CHECK(provisional IN (0,1,2));" + STATION_SCHEMA
                         )
-                    migration += NUMBERING_SCHEMA
+                    if version < 3:
+                        migration += NUMBERING_SCHEMA
+                    migration += PHOTO_FOLDER_SCHEMA
                     self.connection.executescript(
                         "BEGIN IMMEDIATE;\n" + migration
                         + f"\nPRAGMA user_version={SCHEMA_VERSION};\nCOMMIT;"

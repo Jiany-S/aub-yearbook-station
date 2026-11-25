@@ -74,6 +74,12 @@ Use <b>Change student</b> to correct a mistaken assignment; a reason is required
 <b>Manage → Backups and event</b>. Restore creates a new event folder. Combine
 uses the latest backups from stations at the same event and keeps separate visits.</p>
 <h2>Picture numbers and practice</h2>
+<p><b>Where are the photos?</b> Inside your event folder, open <b>originals</b>.
+Students have folders named <b>AUBID_username</b>, with visits such as
+<b>2026-11-26_session-01</b> inside. Retakes on the same day get separate session
+numbers. Opening an older event organizes saved photos automatically and keeps
+their filenames and picture numbers. Use the app to manage photos so their links
+stay correct.</p>
 <p>New filenames end in a general picture number such as <b>_P000123.jpg</b>.
 It continues across students, sessions, event folders, and restarts in the same
 Windows profile. The thumbnail shows this number too. A failed save can leave

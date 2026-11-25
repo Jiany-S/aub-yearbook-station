@@ -208,8 +208,120 @@ class StationService:
                 "INSERT INTO sessions(session_key,student_key,identity_json,state,started_at) VALUES (?,?,?,'active',?)",
                 (key, person_key, json.dumps(person, ensure_ascii=False), utc_now()),
             )
+            session = store.connection.execute("SELECT * FROM sessions WHERE session_key=?", (key,)).fetchone()
+            self._photo_directory(store, session)
             store.audit("session-started", key, {"person_key": person_key})
             return key
+
+    def _photo_directory(self, store, session) -> str:
+        """Freeze a readable, collision-free directory for this visit."""
+        if session["photo_directory"]:
+            return session["photo_directory"]
+        person = json.loads(session["identity_json"])
+
+        def component(value, fallback):
+            return re.sub(r"[^A-Za-z0-9._-]", "_", value).strip("._-")[:40] or fallback
+
+        original_key = person.get("student_key") or session["student_key"]
+        identity = component(person.get("student_id", ""), "provisional-" + original_key[:12])
+        username = component(person.get("username", ""), "unknown")
+        student_folder = identity + "_" + username
+        day = datetime.fromisoformat(session["started_at"]).astimezone(ZoneInfo(self.settings()["timezone"])).date()
+        occupied = {row[0].casefold() for row in store.connection.execute(
+            "SELECT photo_directory FROM sessions WHERE photo_directory IS NOT NULL"
+        )}
+        visit = 1
+        while True:
+            relative = f"originals/{student_folder}/{day}_session-{visit:02d}"
+            if relative.casefold() not in occupied and not safe_path(self.root, relative).exists():
+                break
+            visit += 1
+        store.connection.execute("UPDATE sessions SET photo_directory=? WHERE session_key=?", (relative, session["session_key"]))
+        return relative
+
+    def organize_photo_folders(self) -> int:
+        """Upgrade saved photos, committing each verified new path before cleanup.
+
+        The workspace must be exclusively held by the caller (the desktop window
+        owns its workspace lock). A crash leaves the old copy or the committed
+        new copy usable; the next run safely resumes and removes verified extras.
+        Failed imports and untracked files are retained for review.
+        """
+        with RosterStore(self.database) as store, atomic(store.connection):
+            self._require_idle(store)
+            if store.connection.execute("SELECT 1 FROM assets WHERE status IN ('pending','staged')").fetchone():
+                raise StationError("Recover pending photos before organizing the photo folders.")
+            sessions = store.connection.execute("SELECT * FROM sessions ORDER BY started_at,session_key").fetchall()
+            for session in sessions:
+                self._photo_directory(store, session)
+        with RosterStore(self.database, read_only=True) as store:
+            assets = store.connection.execute(
+                "SELECT a.*,s.photo_directory FROM assets a JOIN sessions s USING(session_key) WHERE a.status='ready'"
+            ).fetchall()
+        moved = 0
+        for asset in assets:
+            relative = (Path(asset["photo_directory"]) / Path(asset["relative_path"]).name).as_posix()
+            if relative == asset["relative_path"]:
+                continue
+            old = safe_path(self.root, asset["relative_path"])
+            destination = safe_path(self.root, relative)
+
+            def verified(path):
+                return path.is_file() and path.stat().st_size == asset["byte_size"] and checksum(path) == asset["sha256"]
+
+            if old.exists() and not verified(old):
+                raise StationError("A saved photo is changed. Its original folder and database link were kept for review.")
+            if destination.exists():
+                if not verified(destination):
+                    raise StationError("A photo folder contains a different file. Nothing was overwritten; review it before reopening the event.")
+            elif not verified(old):
+                raise StationError("A saved photo is missing. Its database link was kept for review.")
+            else:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(prefix=".organizing-", dir=destination.parent, delete=False) as writer:
+                        temporary = Path(writer.name)
+                        with old.open("rb") as reader:
+                            shutil.copyfileobj(reader, writer, 1024 * 1024)
+                        writer.flush()
+                        os.fsync(writer.fileno())
+                    if not verified(temporary):
+                        raise StationError("A photo failed verification while organizing. Its original was kept.")
+                    publish_file(temporary, destination)
+                finally:
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
+            with RosterStore(self.database) as store, atomic(store.connection):
+                store.connection.execute("UPDATE assets SET relative_path=? WHERE asset_key=?", (relative, asset["asset_key"]))
+                store.audit("photo-folder-organized", asset["asset_key"], {"previous_path": asset["relative_path"]})
+            moved += 1
+            self._clean_organized_photo(asset["relative_path"], relative, asset["sha256"])
+        # Also recover a shutdown after a database commit but before old-copy cleanup.
+        with RosterStore(self.database, read_only=True) as store:
+            rows = store.connection.execute(
+                "SELECT l.details_json,a.relative_path,a.sha256 FROM audit_log l JOIN assets a ON a.asset_key=l.entity_key "
+                "WHERE l.action='photo-folder-organized' AND a.status='ready'"
+            ).fetchall()
+        for row in rows:
+            self._clean_organized_photo(json.loads(row["details_json"])["previous_path"], row["relative_path"], row["sha256"])
+        return moved
+
+    def _clean_organized_photo(self, previous: str, current: str, digest: str):
+        old, saved = safe_path(self.root, previous), safe_path(self.root, current)
+        if old == saved or not old.is_file():
+            return
+        if not saved.is_file() or checksum(saved) != digest or checksum(old) != digest:
+            return
+        old.unlink()
+        directory = old.parent
+        originals = (self.root / "originals").resolve()
+        while directory != originals and directory.is_relative_to(originals):
+            try:
+                directory.rmdir()
+            except OSError:
+                break
+            directory = directory.parent
 
     def finish_session(self, session_key: str, notes: str = ""):
         with RosterStore(self.database) as store, atomic(store.connection):
@@ -343,7 +455,7 @@ class StationService:
             username = person.get("username") or "unknown"
             stamp = local.strftime("%Y%m%d_%H%M%S") + f"{local.microsecond // 1000:03d}"
             filename = f"{identity}_{username}_{stamp}_{settings['station_code']}_{sequence:04d}_P{picture.number:06d}{source.suffix.casefold()}"
-            relative = (Path("originals") / session["student_key"] / capture.session_key / filename).as_posix()
+            relative = (Path(self._photo_directory(store, session)) / filename).as_posix()
             store.connection.execute(
                 """INSERT INTO assets(asset_key,session_key,sequence,relative_path,original_name,status,created_at,captured_at,time_source,source_kind,picture_number,numbering_machine_id)
                    VALUES (?,?,?,?,?,'pending',?,?,?,?,?,?)""",

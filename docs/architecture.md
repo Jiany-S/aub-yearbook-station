@@ -82,8 +82,24 @@ the staged checksum, publishes without replacing an existing file, then marks
 the asset ready. User-selected files outside the camera inbox are never deleted;
 verified camera intermediates are removed after asset commit. Filenames use the identity
 snapshot, event timezone, millisecond time, station code, session sequence, and a
-six-digit-minimum general picture number (`_P000001`); immutable
-person/session directories prevent collisions across visits.
+six-digit-minimum general picture number (`_P000001`). Schema v4 gives every
+session an immutable `photo_directory`, for example
+`originals/900000001_testcam1/2026-11-26_session-01`. The date uses the session's
+start time in the event timezone. Allocation skips case-insensitive database
+collisions and existing directories, so retakes and untracked files are separate.
+The original identity snapshot supplies the folder label; later corrections do
+not rewrite it. Student and session UUIDs remain database identifiers.
+
+After startup recovery, the desktop organizes older saved photos into these
+directories while holding the workspace lock. Each new copy is flushed and
+checksum-verified before the asset's new path and cleanup audit are committed
+together. Only then is the verified old duplicate removed. An interruption before
+commit leaves the old link usable; one after commit leaves the new link usable.
+Reopening resumes copying and audited cleanup. Empty old directories are removed;
+failed imports, partial files, and untracked files remain for review. Missing,
+changed, or conflicting files keep their existing links and produce a visible
+review message without preventing the event from opening. Archives continue to
+validate older databases and UUID paths; restored events upgrade on opening.
 
 The general counter is an independent local SQLite ledger outside workspaces.
 An immediate transaction serializes allocation across app processes. The allocated

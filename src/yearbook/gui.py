@@ -165,6 +165,14 @@ class MainWindow(QMainWindow):
         try:
             self.service = StationService(self.root)
             recovery = self.service.recover_interrupted()
+            folder_warning = ""
+            try:
+                self.service.organize_photo_folders()
+            except (StationError, OSError) as exc:
+                # Each photo retains a usable database link if organizing stops.
+                # Keep the event accessible so the operator can review the files.
+                logging.warning("Photo folders need review: %s", exc)
+                folder_warning = f"Photo folders need review: {exc}"
         except BaseException:
             self.workspace_lock.unlock()
             raise
@@ -194,7 +202,9 @@ class MainWindow(QMainWindow):
         available = self.screen().availableGeometry()
         self.resize(min(self.width(), max(720, available.width() - 40)),
                     min(self.height(), max(460, available.height() - 70)))
-        if recovery["interrupted_sessions"] or recovery["failed_assets"]:
+        if folder_warning:
+            self.statusBar().showMessage(folder_warning)
+        elif recovery["interrupted_sessions"] or recovery["failed_assets"]:
             self.statusBar().showMessage("An interrupted session needs review. Open Manage → History.")
 
     def _build(self):

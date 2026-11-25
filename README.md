@@ -87,6 +87,16 @@ Keep active workspaces on a local disk,
 outside the app installation directory. Each independent station needs its own
 workspace and station code. Do not share the SQLite database over a network drive.
 
+Photos use readable folders inside the workspace, for example
+`originals/900000001_testcam1/2026-11-26_session-01/`. The student folder contains
+their AUB ID and username; separate visits on a date get session-01, session-02,
+and so on, using the event timezone. Unknown provisional identifiers have clear
+fallback labels. Opening an older event organizes saved photos automatically and
+updates their database links after verifying each copy. Original filenames,
+picture numbers, and photo bytes stay the same. Existing identity corrections
+retain the folder's captured identity, as they do the filename. Keep using the
+app to manage photos so its stored links remain valid.
+
 Use **Manage → Backups and event → Save backup** after finishing the active session. A backup
 contains the database, original photo files, checksums, JSON manifest, and CSV
 summary. Save a copy to a separate drive. Backups contain student information and

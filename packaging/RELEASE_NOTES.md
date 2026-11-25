@@ -1,4 +1,14 @@
 Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
+
+New in 0.5.2: readable photo folders, such as
+`originals/900000001_testcam1/2026-11-26_session-01/`. Separate visits on the same
+day get session-02, session-03, and so on. Opening an older event automatically
+organizes its saved photos, verifies each copy, and updates the database links.
+Photo filenames, general picture numbers, original bytes, and student/session
+identifiers are preserved. Older event backups can still be restored. Interrupted
+organization resumes when the event is reopened; untracked and incomplete files
+remain available for review. Install this update over the existing app.
+
 Initial physical EOS 700D testing passed with EDSDK 3.6.30.6400 x64: eight JPEG
 photos across two students, continuous numbering, checksum checks, finishing,
 backup, and restore. Full pre-event reliability validation remains pending.
