@@ -485,7 +485,7 @@ class StationService:
             return
         if self.students() or settings["event_name"] or settings["is_demo"]:
             raise StationError("Camera test students require a separate empty event folder.")
-        self.configure("Canon camera test · synthetic students", "TEST")
+        self.configure("Canon camera test · practice only", "TEST")
         rows = [["ID", "FIRST LATEST", "LAST LATEST", "EMAIL", "SHRDGMR PROGRAM"],
                 *[[f"90000000{i}", "Camera Test", f"Student {i}", f"testcam{i}@mail.aub.edu", "Synthetic test"] for i in range(1, 6)]]
         self.import_roster(parse_rows(rows, source_name="Built-in camera test students"))

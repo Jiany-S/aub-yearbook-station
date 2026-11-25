@@ -405,7 +405,7 @@ class MainWindow(QMainWindow):
         else:
             banner = "Manual mode: add photos from this laptop. Connect a Canon camera under Manage → Camera."
         if config.get("is_camera_test"):
-            banner = "CAMERA TEST · Synthetic students and a separate picture counter. " + banner
+            banner = "CAMERA TEST · Separate practice event and picture counter. " + banner
         self.banner.setText(banner)
         configured = bool(config["event_name"])
         operational = configured and (count > 0 or bool(self.active))
@@ -858,6 +858,7 @@ class MainWindow(QMainWindow):
             self.error(str(exc))
             return
         QSettings().setValue("workspace", str(Path(root).resolve()))
+        self.management_dialog.reject()
         self.next_window.show()
         self.close()
 
@@ -882,6 +883,7 @@ class MainWindow(QMainWindow):
                 self.next_window = None
             self.error(str(exc))
             return
+        self.management_dialog.reject()
         self.next_window.show()
         self.close()
 
@@ -900,6 +902,7 @@ class MainWindow(QMainWindow):
                 self.next_window = None
             self.error(str(exc))
             return
+        self.management_dialog.reject()
         self.next_window.show()
         self.close()
 

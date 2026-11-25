@@ -13,7 +13,7 @@ watcher. RAW import and other camera brands are later work.
 ## Install and launch
 
 1. Open [GitHub Releases](https://github.com/Jiany-S/aub-yearbook-station/releases).
-2. Download **AUBYearbookStation-0.5.0-Windows-x64-Setup.exe**.
+2. Download **AUBYearbookStation-0.5.1-Windows-x64-Setup.exe**.
 3. Run the setup and launch **AUB Yearbook Station** from the Start menu.
 
 Python and Microsoft Excel are not required. Installation is per Windows user
@@ -74,7 +74,9 @@ for Canon's transfer jobs when finishing.
 Transfers without a reliable capture-time match stay in a local review folder.
 Use **Manage → Camera** to recover them explicitly. Disconnect before event
 management and backup; unresolved transfers block backup creation.
-The EOS 700D is the initial test target; actual hardware testing is still pending.
+Basic EOS 700D testing has verified eight JPEG photos across two student sessions,
+continuous numbering, clean finishing, backup, and restore with EDSDK 3.6.30.6400
+x64. The full pre-event reliability checks remain pending.
 See the [Canon test procedure](docs/canon-testing.md) for requirements and limits.
 
 ## Storage, backups, and multiple stations

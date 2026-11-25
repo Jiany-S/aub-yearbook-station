@@ -80,6 +80,7 @@ class CanonSDK:
         self.fault = None
         self.jobs_pending = False
         self.old_save_to = None
+        self.ui_locked = False
         self.owner = threading.get_ident()
         self.object_callback = OBJECT_CALLBACK(self._object_event)
         self.state_callback = STATE_CALLBACK(self._state_event)
@@ -225,10 +226,18 @@ class CanonSDK:
             raise CameraError("Set a valid date and time on the camera before connecting.") from exc
 
     def lock(self):
+        self._thread()
+        if self.ui_locked:
+            return
         self._call("EdsSendStatusCommand", self.camera, 0, 0)
+        self.ui_locked = True
 
     def unlock(self):
+        self._thread()
+        if not self.ui_locked:
+            return
         self._call("EdsSendStatusCommand", self.camera, 1, 0)
+        self.ui_locked = False
 
     def download_next(self, inbox, connection_key):
         reference = self.pending.popleft()
@@ -283,12 +292,16 @@ class CanonSDK:
                     self._call("EdsSetPropertyData", self.camera, SAVE_TO, 0, C.sizeof(old), C.byref(old))
                 except Exception as exc:
                     errors.append(str(exc))
-            for name, arguments in (("EdsSendStatusCommand", (self.camera, 1, 0)), ("EdsCloseSession", (self.camera,))):
-                try:
-                    self._call(name, *arguments)
-                except Exception as exc:
-                    errors.append(str(exc))
+            try:
+                self.unlock()
+            except Exception as exc:
+                errors.append(str(exc))
+            try:
+                self._call("EdsCloseSession", self.camera)
+            except Exception as exc:
+                errors.append(str(exc))
         self.session_open = False
+        self.ui_locked = False
         while self.pending:
             self._release(self.pending.popleft())
         self._release(self.camera)

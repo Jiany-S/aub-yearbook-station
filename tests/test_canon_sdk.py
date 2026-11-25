@@ -121,3 +121,36 @@ def test_direct_transfer_request_is_cancelled_and_released():
     assert cancelled == [123] and released == [123]
     assert not driver.pending
     assert "existing files" in driver.fault
+
+
+def test_camera_lock_commands_are_idempotent_for_the_700d():
+    driver = CanonSDK("unused")
+    commands = []
+    def command(reference, operation, parameter):
+        # The real EOS 700D returns DEVICE_BUSY when asked to lock twice.
+        expected = 0 if not commands or commands[-1] == 1 else 1
+        if operation != expected:
+            return 0x81
+        commands.append(operation)
+        return 0
+    driver.dll = SimpleNamespace(EdsSendStatusCommand=command)
+    driver.lock()
+    driver.lock()
+    driver.unlock()
+    driver.unlock()
+    driver.lock()
+    assert commands == [0, 1, 0]
+
+
+def test_disconnect_does_not_unlock_an_already_unlocked_700d():
+    driver = CanonSDK("unused")
+    commands = []
+    driver.dll = SimpleNamespace(
+        EdsSendStatusCommand=lambda *a: commands.append("unexpected unlock") or 0x81,
+        EdsCloseSession=lambda *a: commands.append("close") or 0,
+        EdsRelease=lambda *a: 0,
+    )
+    driver.camera = REF(123)
+    driver.session_open = True
+    assert driver.disconnect() == []
+    assert commands == ["close"]

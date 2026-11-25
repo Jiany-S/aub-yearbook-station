@@ -1,5 +1,11 @@
 Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
-The connector is implemented; physical EOS 700D testing is still pending.
+Initial physical EOS 700D testing passed with EDSDK 3.6.30.6400 x64: eight JPEG
+photos across two students, continuous numbering, checksum checks, finishing,
+backup, and restore. Full pre-event reliability validation remains pending.
+
+0.5.1 fixes the duplicate UI-lock command rejected as DEVICE_BUSY by the EOS 700D
+when starting a student. It also closes the old management dialog when switching
+event folders and uses a general practice-event label when testing with a roster.
 
 New in 0.5.0:
 

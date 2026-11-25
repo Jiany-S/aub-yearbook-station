@@ -1,9 +1,28 @@
 # Canon USB camera test
 
 The connector is implemented for **Windows x64** and an external **Canon EDSDK**.
-It has automated simulated-camera and native-binding tests. The EOS 700D has not
-yet passed a physical hardware test with this app. Do not describe it as approved
-for a photoshoot until that test is complete.
+It has automated simulated-camera and native-binding tests, plus the initial
+physical EOS 700D checks below. Full pre-event reliability validation remains
+pending; this initial check does not approve every Canon model or event setup.
+
+## Initial hardware result — 26 November 2026
+
+The EOS 700D was tested on Windows x64 build 26200 with EDSDK 3.6.30.6400 x64 and
+application 0.5.1. The roster and photos stayed in a private camera-test event.
+
+- Camera identification, connection, clock reads, and shutter unlocking worked.
+- Eight physical-shutter JPEG photos saved: five for the first test student and
+  three for the second, with general picture numbers 1 through 8.
+- All stored checksums matched; filenames matched the selected session identity.
+- Both sessions finished successfully, and no transfers remained unassigned.
+- Backup validation and restoration preserved all eight photos.
+- The production picture counter remained unchanged.
+- The first arming attempt exposed duplicate lock commands rejected as
+  DEVICE_BUSY. Version 0.5.1 makes lock/unlock commands idempotent and avoids a
+  duplicate unlock during disconnection.
+
+Camera firmware/cable details and the longer reliability checks below still need
+to be recorded. No real roster or test photographs are published with this result.
 
 ## Prepare the SDK and camera
 

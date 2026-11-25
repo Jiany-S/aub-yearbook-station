@@ -1,6 +1,6 @@
 from functools import partial
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QMessageBox
 
 from yearbook.camera_worker import CameraWorker
@@ -115,3 +115,17 @@ def test_missing_sdk_leaves_manual_mode_usable(qtbot, tmp_path, synthetic_roster
     assert window.search.isEnabled()
     window.close()
     assert not window.camera_thread.isRunning()
+
+
+def test_opening_camera_test_closes_the_old_modal_dialog(qtbot, tmp_path):
+    window = MainWindow(tmp_path / "original-event")
+    qtbot.addWidget(window)
+    window.show()
+    QTimer.singleShot(0, window.open_camera_test)
+    window.show_management()
+    assert not window.management_dialog.isVisible()
+    assert not window.isVisible()
+    assert window.next_window.isVisible()
+    assert window.next_window.service.settings()["is_camera_test"]
+    assert window.service.students() == []
+    qtbot.addWidget(window.next_window)
