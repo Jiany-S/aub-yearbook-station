@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from PIL import Image, UnidentifiedImageError
 
 from .camera import CaptureEnvelope
+from .numbering import MachineCounter, default_counter_path
 from .roster import Roster, RosterValidationError, load_roster, parse_rows
 from .store import RosterStore, atomic, utc_now
 
@@ -54,8 +55,9 @@ def publish_file(temporary: Path, destination: Path):
 
 
 class StationService:
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, counter_path: str | Path | None = None):
         self.root = Path(root).resolve()
+        self.counter_path = Path(counter_path).resolve() if counter_path is not None else default_counter_path()
         self.root.mkdir(parents=True, exist_ok=True)
         self.database = self.root / "station.sqlite3"
         with RosterStore(self.database) as store, atomic(store.connection):
@@ -280,16 +282,18 @@ class StationService:
                 raise StationError("The explicitly selected session is no longer active. This photo was not assigned elsewhere.")
             person = json.loads(session["identity_json"])
             sequence = store.connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM assets WHERE session_key=?", (capture.session_key,)).fetchone()[0]
+            counter_path = self.root / "demo-counter.sqlite3" if settings["is_demo"] else self.counter_path
+            picture = MachineCounter(counter_path).reserve()
             identity = person.get("student_id") or "provisional-" + session["student_key"][:8]
             username = person.get("username") or "unknown"
             stamp = local.strftime("%Y%m%d_%H%M%S") + f"{local.microsecond // 1000:03d}"
-            filename = f"{identity}_{username}_{stamp}_{settings['station_code']}_{sequence:04d}{source.suffix.casefold()}"
+            filename = f"{identity}_{username}_{stamp}_{settings['station_code']}_{sequence:04d}_P{picture.number:06d}{source.suffix.casefold()}"
             relative = (Path("originals") / session["student_key"] / capture.session_key / filename).as_posix()
             store.connection.execute(
-                """INSERT INTO assets(asset_key,session_key,sequence,relative_path,original_name,status,created_at,captured_at,time_source,source_kind)
-                   VALUES (?,?,?,?,?,'pending',?,?,?,?)""",
+                """INSERT INTO assets(asset_key,session_key,sequence,relative_path,original_name,status,created_at,captured_at,time_source,source_kind,picture_number,numbering_machine_id)
+                   VALUES (?,?,?,?,?,'pending',?,?,?,?,?,?)""",
                 (key, capture.session_key, sequence, relative, source.name, utc_now(), instant.astimezone(timezone.utc).isoformat(),
-                 "provided" if capture.captured_at else "received", capture.source_kind),
+                 "provided" if capture.captured_at else "received", capture.source_kind, picture.number, picture.machine_id),
             )
         destination = safe_path(self.root, relative)
         temporary = destination.with_name(destination.name + ".partial")

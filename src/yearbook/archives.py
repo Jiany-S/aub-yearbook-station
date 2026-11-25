@@ -70,6 +70,14 @@ def validate_backup(path: str | Path) -> dict:
                     declared = {a["asset_key"]: (a["status"], a["relative_path"], a["sha256"]) for a in manifest["assets"]}
                     if db_assets != declared:
                         raise StationError("The manifest and database describe different assets.")
+                    columns = {r[1] for r in connection.execute("PRAGMA table_info(assets)")}
+                    if {"picture_number", "numbering_machine_id"}.issubset(columns):
+                        db_numbers = {r[0]: (r[1], r[2]) for r in connection.execute(
+                            "SELECT asset_key,picture_number,numbering_machine_id FROM assets"
+                        )}
+                        declared_numbers = {a["asset_key"]: (a.get("picture_number"), a.get("numbering_machine_id")) for a in manifest["assets"]}
+                        if db_numbers != declared_numbers:
+                            raise StationError("The manifest and database describe different picture numbers.")
                     settings = {r[0]: json.loads(r[1]) for r in connection.execute("SELECT key,value FROM settings")}
                     if settings != manifest["settings"]:
                         raise StationError("The manifest and database describe different stations.")

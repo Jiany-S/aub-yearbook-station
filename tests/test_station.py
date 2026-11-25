@@ -65,7 +65,7 @@ def test_import_preserves_original_bytes_and_names_burst_uniquely(station, photo
     first = station.ingest(CaptureEnvelope(key, photo, instant))
     second = station.ingest(CaptureEnvelope(key, photo, instant))
     assert first["relative_path"] != second["relative_path"]
-    assert "202600001_test1_20261130_143010123_ST01_0001.jpg" in first["relative_path"]
+    assert "202600001_test1_20261130_143010123_ST01_0001_P000001.jpg" in first["relative_path"]
     assert safe_path(station.root, first["relative_path"]).read_bytes() == before == photo.read_bytes()
     assert first["sha256"] == checksum(photo)
     assert first["time_source"] == "provided"
@@ -285,4 +285,4 @@ def test_version_one_database_migration_preserves_keys(tmp_path):
     with RosterStore(database) as store:
         assert store.find_student("test1")["student_key"] == "stable-key"
         assert not store.find_student("test1")["is_provisional"]
-        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == 3

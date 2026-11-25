@@ -70,6 +70,7 @@ def test_demo_worker_saves_photos_and_finishes_cleanly(qtbot, tmp_path):
     assert not window.finish_button.isEnabled()
     qtbot.waitUntil(lambda: not window.busy, timeout=30000)
     assert window.photos.count() == 3
+    assert "Picture #000001" in window.photos.item(0).text()
     assert window.active["photo_count"] == 3
     qtbot.mouseClick(window.finish_button, Qt.MouseButton.LeftButton)
     assert window.active is None

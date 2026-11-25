@@ -11,7 +11,7 @@ to a camera or automatically assign files arriving in a watched folder.
 ## Install and launch
 
 1. Open [GitHub Releases](https://github.com/Jiany-S/aub-yearbook-station/releases).
-2. Download **AUBYearbookStation-0.2.0-Windows-x64-Setup.exe**.
+2. Download **AUBYearbookStation-0.3.0-Windows-x64-Setup.exe**.
 3. Run the setup and launch **AUB Yearbook Station** from the Start menu.
 
 Python and Microsoft Excel are not required. Installation is per Windows user
@@ -36,7 +36,8 @@ included. Open **Settings** to name the event and set the station code and opera
   tick the confirmation box, then select **Start photographing**.
 - Use **Add selected photos** to copy JPEG, PNG, or TIFF files into the active
   session. Originals stay untouched. Files are checksummed and named with student
-  ID, username, local date/time, station code, and sequence.
+  ID, username, local date/time, station code, session sequence, and a general
+  picture number such as `_P000001`.
 - Select **Finish session** before starting another student. Looking up the next
   student never changes the active student's assignment.
 - Create a provisional record for someone missing from the roster. Reconcile it
@@ -71,6 +72,13 @@ directories; it is an archive for the team, not a station workspace.
 Restoring a workspace preserves its station identity. To run another independent
 station, create a new workspace instead of cloning an existing one. Updates and
 uninstalling the program leave separately stored workspace data intact.
+
+The general picture number increases across all students, sessions, and workspaces
+on that laptop under the same Windows user profile. It continues after restarting
+or updating the app and after restoring an event backup. The ledger is stored at
+`%LOCALAPPDATA%\AUBYearbookStation\machine-counter.sqlite3`, outside event folders.
+Demo workspaces use their own counter. A failed save may leave a gap; reserved
+numbers are never reused. Existing photos keep their original filenames.
 
 ## Development
 

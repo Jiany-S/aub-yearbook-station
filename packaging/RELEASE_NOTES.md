@@ -1,5 +1,11 @@
 Windows preview of AUB Yearbook Station. Live camera integration is pending.
 
+New in 0.3.0: filenames now include a general picture number such as `_P000001`,
+incrementing across every student, session, and workspace in the same Windows
+user profile. Numbering persists across restarts and updates. Demo mode has an
+independent counter. Existing photos retain their filenames, and older databases
+upgrade automatically.
+
 Download **Windows-x64-Setup.exe** for the easiest installation. Run it, install
 for your Windows user, and launch **AUB Yearbook Station** from the Start menu.
 Python and Microsoft Excel are not required. The portable ZIP is an alternative:

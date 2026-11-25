@@ -31,6 +31,8 @@ flowchart LR
   connection per operation, so file workers never reuse a UI-thread connection.
 - `camera.py` defines an explicit session-bearing capture envelope and the future
   camera adapter boundary. The current service rejects camera-origin ingestion.
+- `numbering.py` allocates durable general picture numbers shared across event
+  workspaces in the same Windows user profile, with a separate demo ledger.
 - `gui.py` provides the operator screens and background file/import/export tasks.
 - `archives.py` validates backups, restores to new folders, and consolidates station
   exports with checksums and an atomic JSON index commit.
@@ -67,8 +69,18 @@ It checks that the image decodes, reserves an asset UUID/sequence/path, copies t
 a partial file, flushes to disk, verifies source stability and SHA-256, records
 the staged checksum, publishes without replacing an existing file, then marks
 the asset ready. Source files are never deleted. Filenames use the identity
-snapshot, event timezone, millisecond time, station code, and sequence; immutable
+snapshot, event timezone, millisecond time, station code, session sequence, and a
+six-digit-minimum general picture number (`_P000001`); immutable
 person/session directories prevent collisions across visits.
+
+The general counter is an independent local SQLite ledger outside workspaces.
+An immediate transaction serializes allocation across app processes. The allocated
+number and numbering-machine UUID are also recorded with each asset and validated
+in backups. The counter continues across students, sessions, workspaces, restarts,
+updates, and event restores in the same Windows profile. Demo imports never consume
+production numbers. Failed allocations/saves can leave gaps; numbers are never
+recycled. Schema v3 adds nullable numbering fields to preserve older assets and
+filenames without guessing retrospective numbers.
 
 A provided timestamp must include a timezone. Manual imports without one use
 receipt time and explicitly record `time_source=received`. EXIF shutter-time

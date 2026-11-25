@@ -385,7 +385,8 @@ class MainWindow(QMainWindow):
     def _photos(self, session_key):
         self.photos.clear()
         for asset in self.service.assets(session_key):
-            item = QListWidgetItem(f"Photo {asset['sequence']:02d}\n{asset['status']}")
+            title = f"Picture #{asset['picture_number']:06d}" if asset.get("picture_number") is not None else f"Photo {asset['sequence']:02d}"
+            item = QListWidgetItem(f"{title}\n{asset['status']}")
             item.setData(Qt.ItemDataRole.UserRole, asset)
             item.setToolTip(asset["relative_path"] + ("\n" + asset["error_text"] if asset["error_text"] else ""))
             if asset["status"] == "ready":
@@ -706,6 +707,9 @@ def self_test(report: Path, screenshot: Path | None = None) -> int:
         window.service.simulate(key, 2)
         window.refresh()
         assert window.photos.count() == 2
+        numbered = window.service.assets(key)
+        assert [asset["picture_number"] for asset in numbered] == [1, 2]
+        assert all(f"_P{asset['picture_number']:06d}.jpg" in asset["relative_path"] for asset in numbered)
         window.show()
         QApplication.processEvents()
         if screenshot:
@@ -715,6 +719,7 @@ def self_test(report: Path, screenshot: Path | None = None) -> int:
         output = window.service.export_backup(Path(folder) / "backup.zip")
         assert output.is_file()
         result = {"passed": True, "version": __version__, "synthetic_students": 5, "saved_photos": 2,
+                  "picture_numbers": [asset["picture_number"] for asset in numbered],
                   "backup_verified": True, "camera_implemented": False}
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(json.dumps(result, indent=2), encoding="utf-8")

@@ -6,6 +6,12 @@ import pytest
 from yearbook.roster import parse_rows
 
 
+@pytest.fixture(autouse=True)
+def isolated_machine_profile(monkeypatch, tmp_path):
+    # Never allocate test picture numbers in the operator's real Windows profile.
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
+
+
 @pytest.fixture
 def synthetic_roster():
     return parse_rows([
