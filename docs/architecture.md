@@ -3,8 +3,9 @@
 ## Scope
 
 This release targets independent Windows photo stations. The student-facing
-selection website and hardware tethering integration are later work. The desktop
-app starts empty; demo mode is explicit and isolated in another workspace.
+selection website and additional camera brands are later work. The experimental
+Canon USB connector awaits hardware validation. The desktop app starts empty;
+demo and camera-test modes are explicit and isolated in separate workspaces.
 
 ```mermaid
 flowchart LR
@@ -30,7 +31,13 @@ flowchart LR
 - `service.py` is the backend used by the UI. It opens a dedicated database
   connection per operation, so file workers never reuse a UI-thread connection.
 - `camera.py` defines an explicit session-bearing capture envelope and the future
-  camera adapter boundary. The current service rejects camera-origin ingestion.
+  camera adapter boundary. Canon ingestion additionally requires a durable,
+  session-bound transfer receipt.
+- `canon_sdk.py` loads an external x64 EDSDK and owns native references, COM STA
+  initialization, callbacks, Unicode downloads, and the camera's save destination.
+- `canon.py` maps JPEG capture times to disjoint camera-clock session intervals.
+- `camera_worker.py` serializes SDK commands and polling on one Qt worker thread.
+- `camera_inbox.py` journals transfers and retains files requiring human review.
 - `numbering.py` allocates durable general picture numbers shared across event
   workspaces in the same Windows user profile, with a separate demo ledger.
 - `gui.py` provides the operator screens and background file/import/export tasks.
@@ -67,11 +74,13 @@ a session requires explicit identity confirmation. Search does not change the
 active session. Every ingestion request carries a specific session UUID; a late
 request for a finished session fails instead of using the next active student.
 
-Current ingestion is limited to user-selected or synthetic JPEG/PNG/TIFF files.
+Manual ingestion accepts user-selected or synthetic JPEG/PNG/TIFF files. The
+experimental Canon path accepts JPEG and requires a bound transfer receipt.
 It checks that the image decodes, reserves an asset UUID/sequence/path, copies to
 a partial file, flushes to disk, verifies source stability and SHA-256, records
 the staged checksum, publishes without replacing an existing file, then marks
-the asset ready. Source files are never deleted. Filenames use the identity
+the asset ready. User-selected files outside the camera inbox are never deleted;
+verified camera intermediates are removed after asset commit. Filenames use the identity
 snapshot, event timezone, millisecond time, station code, session sequence, and a
 six-digit-minimum general picture number (`_P000001`); immutable
 person/session directories prevent collisions across visits.
@@ -80,14 +89,15 @@ The general counter is an independent local SQLite ledger outside workspaces.
 An immediate transaction serializes allocation across app processes. The allocated
 number and numbering-machine UUID are also recorded with each asset and validated
 in backups. The counter continues across students, sessions, workspaces, restarts,
-updates, and event restores in the same Windows profile. Demo imports never consume
+updates, and event restores in the same Windows profile. Demo and camera-test imports never consume
 production numbers. Failed allocations/saves can leave gaps; numbers are never
 recycled. Schema v3 adds nullable numbering fields to preserve older assets and
 filenames without guessing retrospective numbers.
 
-A provided timestamp must include a timezone. Manual imports without one use
-receipt time and explicitly record `time_source=received`. EXIF shutter-time
-extraction and RAW/JPEG capture grouping belong to the hardware adapter milestone.
+A provided timestamp must include a timezone. Imports without one use receipt
+time and explicitly record `time_source=received`. The Canon connector uses
+camera-local EXIF time for ownership, but keeps receipt-time filenames because it
+does not infer the camera timezone. RAW/JPEG grouping remains later work.
 
 SQLite uses WAL, foreign keys, and FULL synchronous commits. On startup, incomplete
 ingest jobs are reconciled against their journaled final paths and checksums.
@@ -136,7 +146,35 @@ conflicting identifiers, reused export IDs, or stale station snapshots require
 review. The atomic index update is the commit point, and verified orphan copies
 from an interrupted merge can be reused on retry.
 
-## Future hardware gate
+## Canon transfer boundary
+
+The native SDK is optional and loaded only from the operator-selected x64 DLL
+path. A single Qt thread initializes COM and EDSDK, owns callbacks and references,
+polls events, downloads files, and performs student transitions. A per-profile
+camera lock prevents competing Yearbook windows. Workspace switching and backup
+are disabled until disconnection.
+
+The connector requests SaveTo=Both, preserving the camera-card copy. Camera
+controls are locked between sessions. Arming waits for a fresh camera-clock
+second before enabling the physical shutter. Finishing locks controls, closes
+that session's capture-time interval, and drains SDK transfer jobs. Disjoint
+intervals plus original JPEG EXIF times prevent notification arrival order from
+selecting the next student. Clock jumps stop the connection. Late closed-session
+transfers, unsupported formats, and missing capture times require human review.
+
+An inbox receipt is written before download. Bytes are flushed and checksummed
+before EdsDownloadComplete; failures call EdsDownloadCancel. Ingestion requires
+the receipt's explicit session binding and matching checksum. The verified
+intermediate file is removed only after asset commit, with an audit association
+that repairs a receipt interrupted after commit. Unassigned files remain local
+and block event backups until explicitly recovered or marked handled. Event
+backups contain saved assets; handled external files are not silently included.
+
+SDK simulation validates application logic, not camera behavior. The connector
+remains experimental until the hardware checks below and in `canon-testing.md`
+pass with the actual camera/SDK/cable combination.
+
+## Hardware validation gate
 
 Do not implement a generic watcher that assigns files to whoever is displayed at
 arrival time. A real adapter must carry capture-time identity context or prove
@@ -149,7 +187,8 @@ rapid student switches. A simulator or manual-import test does not pass this gat
 
 ## Data boundaries
 
-The public source/release contains no real student records, photos, or database.
+The public source/release contains no real student records, photos, database, or
+Canon SDK files. Canon's external package is obtained separately under its terms.
 Runtime workspaces and backups are private local artifacts. This release has no
 network sync, analytics, authentication, or student gallery. The UUID-based
 session/asset manifest will support a later authenticated selection platform.

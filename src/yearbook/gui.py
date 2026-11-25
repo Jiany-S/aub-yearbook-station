@@ -15,7 +15,7 @@ import tempfile
 import traceback
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QLockFile, QObject, QRunnable, QSettings, QSize, Qt, QThreadPool, Signal
+from PySide6.QtCore import QLockFile, QObject, QRunnable, QSettings, QSize, Qt, QThread, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QDesktopServices, QIcon, QImageReader, QPixmap
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
 
 from . import __version__
 from .camera import CaptureEnvelope
+from .camera_inbox import CameraInbox
+from .camera_worker import CameraWorker
 from .roster import load_roster
 from .service import StationError, StationService, safe_path
 from .help_content import HOW_TO_HTML
@@ -149,6 +151,8 @@ class ProvisionalDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
+    camera_requested = Signal(str, object)
+
     def __init__(self, workspace: str | Path):
         super().__init__()
         apply_theme(QApplication.instance())
@@ -169,6 +173,16 @@ class MainWindow(QMainWindow):
         self.busy = False
         self.task = None
         self.next_window = None
+        self.camera_connected = False
+        self.camera_name = "Canon"
+        self.camera_message = "Camera disconnected. Manual photo import is available."
+        self.camera_thread = None
+        self.camera_worker = None
+        self.close_after_camera = False
+        self.camera_refresh_timer = QTimer(self)
+        self.camera_refresh_timer.setSingleShot(True)
+        self.camera_refresh_timer.setInterval(150)
+        self.camera_refresh_timer.timeout.connect(self.refresh)
         self._config = self.service.settings()
         self._students = []
         self._sessions = []
@@ -217,6 +231,7 @@ class MainWindow(QMainWindow):
         self.manage_tabs = QTabWidget()
         self.manage_tabs.addTab(self._history_tab(), "History")
         self.manage_tabs.addTab(self._backup_tab(), "Backups and event")
+        self.manage_tabs.addTab(self._camera_tab(), "Camera")
         manage_layout.addWidget(self.manage_tabs, 1)
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         close.rejected.connect(self.management_dialog.reject)
@@ -331,8 +346,46 @@ class MainWindow(QMainWindow):
         self.storage_path.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.storage_path)
         layout.addStretch()
-        layout.addWidget(label(f"Version {__version__} · Camera connection is not available in this preview.", "muted"))
+        layout.addWidget(label(f"Version {__version__} · Canon USB connector is experimental; test your camera before the event.", "muted"))
         return self._scroll_page(tab)
+
+    def _camera_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.addWidget(label("Canon USB · experimental JPEG connector", "activeCard"))
+        layout.addWidget(label("Use the official Windows x64 EDSDK. Keep its DLLs together outside the app installation folder. Close EOS Utility and other camera apps. Connect one camera with an SD card, select JPEG, and turn it on.", "muted"))
+        self.sdk_path = QLineEdit(str(QSettings().value("canon_sdk_path", "")))
+        self.sdk_path.setReadOnly(True)
+        self.sdk_path.setPlaceholderText("Choose EDSDK_64/Dll/EDSDK.dll")
+        layout.addWidget(self.sdk_path)
+        sdk_actions = QHBoxLayout()
+        self.sdk_button = button("Choose Canon SDK", self.choose_canon_sdk)
+        self.camera_connect_button = button("Connect camera", self.connect_camera, primary=True)
+        self.camera_disconnect_button = button("Disconnect camera", self.disconnect_camera)
+        for widget in (self.sdk_button, self.camera_connect_button, self.camera_disconnect_button):
+            sdk_actions.addWidget(widget)
+        sdk_actions.addStretch()
+        layout.addLayout(sdk_actions)
+        self.camera_status = label("", "nextStep")
+        layout.addWidget(self.camera_status)
+        self.camera_test_button = button("Open separate camera test event", self.open_camera_test)
+        layout.addWidget(self.camera_test_button, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(label("Test usernames: testcam1–testcam5. The camera shutter is paused between sessions. Start a student on Photoshoot, take pictures, then Finish before switching students. Photos are also kept on the SD card.", "muted"))
+        self.transfer_note = label("", "muted")
+        layout.addWidget(self.transfer_note)
+        self.transfer_table = self.table(["File", "Why it needs review"])
+        self.transfer_table.setMinimumHeight(100)
+        self.transfer_table.itemSelectionChanged.connect(self._buttons)
+        layout.addWidget(self.transfer_table, 1)
+        review_actions = QHBoxLayout()
+        self.transfer_folder_button = button("Open transfer review folder", self.open_transfer_folder)
+        self.transfer_handled_button = button("Mark selected as handled", self.handle_camera_transfer)
+        review_actions.addWidget(self.transfer_folder_button)
+        review_actions.addWidget(self.transfer_handled_button)
+        review_actions.addStretch()
+        layout.addLayout(review_actions)
+        layout.addWidget(label("To recover a JPEG, disconnect the camera, start the correct student, then use Add photos to select the file from this folder. For other files, copy them to private storage and record how you handled them. Unassigned transfers block event backups.", "muted"))
+        return self._scroll_page(page)
 
 
     def refresh(self):
@@ -345,8 +398,15 @@ class MainWindow(QMainWindow):
         self.heading.setText("Yearbook Station")
         student_label = "student" if count == 1 else "students"
         self.event_summary.setText(f"{config['event_name'] or 'New event'} · {config['station_code']} · {count} {student_label}")
-        self.banner.setText("DEMO · Sample students only. Add sample photos to practice."
-                            if config["is_demo"] else "Manual mode: add photos from this laptop. Camera connection is not available yet.")
+        if config["is_demo"]:
+            banner = "DEMO · Sample students only. Add sample photos to practice."
+        elif self.camera_connected:
+            banner = f"{self.camera_name} connected · JPEG photos transfer automatically during the active session."
+        else:
+            banner = "Manual mode: add photos from this laptop. Connect a Canon camera under Manage → Camera."
+        if config.get("is_camera_test"):
+            banner = "CAMERA TEST · Synthetic students and a separate picture counter. " + banner
+        self.banner.setText(banner)
         configured = bool(config["event_name"])
         operational = configured and (count > 0 or bool(self.active))
         self.capture_stack.setCurrentIndex(1 if operational else 0)
@@ -395,6 +455,22 @@ class MainWindow(QMainWindow):
         self.history_selected()
         self.workspace_info.setText(f"{config['event_name'] or 'Event not set up'} · {config['station_code']}\nSessions: {len(sessions)} · Need review: {sum(s['state']=='needs-review' for s in sessions)}")
         self.storage_path.setText(f"Saved on this laptop: {self.root}")
+        transfers = self.service.camera_transfers()
+        self.camera_status.setText(self.camera_message)
+        self.transfer_note.setText(f"Transfers needing review: {len(transfers)}" if transfers else "No camera transfers need review.")
+        if transfers:
+            self.banner.setText(self.banner.text() + f" · {len(transfers)} transfer(s) need review under Manage → Camera.")
+        if not self.camera_connected and not (configured and count):
+            self.camera_status.setText(self.camera_message + " Set up an event and import students, or open the separate camera test event below.")
+        previous_transfer = self.selected(self.transfer_table)
+        self.transfer_table.blockSignals(True)
+        self.transfer_table.setRowCount(len(transfers))
+        for row, receipt in enumerate(transfers):
+            self._row(self.transfer_table, row, [receipt["original_name"], receipt["reason"] or "Transfer not yet assigned"], receipt)
+            if previous_transfer and receipt["receipt_key"] == previous_transfer["receipt_key"]:
+                self.transfer_table.setCurrentCell(row, 0)
+        self.transfer_table.blockSignals(False)
+        self.transfer_table.setVisible(bool(transfers))
         self._buttons()
         if not self.busy:
             if not configured:
@@ -444,7 +520,7 @@ class MainWindow(QMainWindow):
         self.confirm.setEnabled(ready and idle and eligible)
         self.search_button.setEnabled(ready and idle and operational)
         self.search.setEnabled(ready and idle and operational)
-        self.add_button.setVisible(bool(self.active) and not config["is_demo"])
+        self.add_button.setVisible(bool(self.active) and not config["is_demo"] and not self.camera_connected)
         self.simulate_button.setVisible(bool(self.active) and config["is_demo"])
         for widget in (self.add_button, self.simulate_button, self.finish_button):
             widget.setEnabled(ready and not idle)
@@ -452,13 +528,19 @@ class MainWindow(QMainWindow):
                        self.import_button, self.backup_button, self.demo_button,
                        self.restore_button, self.combine_button, self.welcome_setup,
                        self.welcome_demo, self.help_demo):
-            widget.setEnabled(ready and idle)
-        self.welcome_import.setEnabled(ready and idle and bool(config["event_name"]))
+            widget.setEnabled(ready and idle and not self.camera_connected)
+        self.welcome_import.setEnabled(ready and idle and bool(config["event_name"]) and not self.camera_connected)
         self.welcome_missing.setEnabled(ready and idle and bool(config["event_name"]))
+        self.provisional_button.setEnabled(ready and idle)
         self.manage_button.setEnabled(ready)
         for widget in (self.welcome_demo, self.help_demo):
             widget.setText("Demo is open" if config["is_demo"] else "Try demo")
-            widget.setEnabled(ready and idle and not config["is_demo"])
+            widget.setEnabled(ready and idle and not config["is_demo"] and not self.camera_connected)
+        self.sdk_button.setEnabled(ready and idle and not self.camera_connected)
+        self.camera_connect_button.setEnabled(ready and idle and operational and not self.camera_connected and not config["is_demo"] and bool(self.sdk_path.text()))
+        self.camera_disconnect_button.setEnabled(ready and self.camera_connected)
+        self.camera_test_button.setEnabled(ready and idle and not self.camera_connected and not config.get("is_camera_test"))
+        self.transfer_handled_button.setEnabled(ready and idle and not self.camera_connected and bool(self.selected(self.transfer_table)))
         for widget, primary in ((self.welcome_setup, not bool(config["event_name"])),
                                 (self.welcome_import, bool(config["event_name"]))):
             if widget.property("primary") != primary:
@@ -474,7 +556,8 @@ class MainWindow(QMainWindow):
         if self.busy:
             hint = "Saving… wait until this operation finishes."
         elif self.active:
-            hint = "Add this student's photos, then finish before moving to the next student."
+            hint = ("Take JPEG photos with the camera. Check the saved count, then finish before the next student."
+                    if self.camera_connected else "Add this student's photos, then finish before moving to the next student.")
         elif not self.found:
             hint = "Enter an AUB ID or username and click Find."
         elif not eligible:
@@ -505,6 +588,8 @@ class MainWindow(QMainWindow):
         self.photo_stack.setCurrentIndex(1 if self.photos.count() else 0)
         self.photo_empty.setText("No photos saved yet.\nClick Add photos to choose this student's pictures."
                                  if not self._config["is_demo"] else "No sample photos yet.\nClick Add sample photos to practice.")
+        if self.camera_connected:
+            self.photo_empty.setText("Take JPEG photos with the camera's shutter button.\nSaved pictures will appear here automatically.")
 
     def error(self, message):
         QMessageBox.warning(self, "Please review", message)
@@ -559,12 +644,18 @@ class MainWindow(QMainWindow):
     def start(self):
         if not self.found:
             return
+        if self.camera_connected:
+            self.camera_action("start", {"student_key": self.found["student_key"], "confirmed": self.confirm.isChecked()})
+            return
         def operation():
             self.service.start_session(self.found["student_key"], identity_confirmed=self.confirm.isChecked())
             self.refresh()
         self.guarded(operation)
 
     def finish(self):
+        if self.active and self.camera_connected:
+            self.camera_action("finish")
+            return
         if self.active:
             def operation():
                 self.service.finish_session(self.active["session_key"])
@@ -756,6 +847,9 @@ class MainWindow(QMainWindow):
                           lambda result: self.statusBar().showMessage(f"Combined: {result['students']} students, {result['sessions']} sessions, {result['assets']} photo records."))
 
     def switch_workspace(self, root):
+        if self.camera_connected or self.busy:
+            self.error("Disconnect the camera and wait for saving to finish before switching event folders.")
+            return
         if Path(root).resolve() == self.root:
             return
         try:
@@ -790,6 +884,110 @@ class MainWindow(QMainWindow):
             return
         self.next_window.show()
         self.close()
+
+    def open_camera_test(self):
+        if self.camera_connected or self.active or self.busy:
+            return
+        root = app_data() / "camera-test"
+        try:
+            self.next_window = MainWindow(root)
+            self.next_window.service.seed_camera_test()
+            self.next_window.refresh()
+        except Exception as exc:
+            if self.next_window:
+                self.next_window.workspace_lock.unlock()
+                self.next_window.deleteLater()
+                self.next_window = None
+            self.error(str(exc))
+            return
+        self.next_window.show()
+        self.close()
+
+    def choose_canon_sdk(self):
+        from .canon_sdk import sdk_file
+        path, _ = QFileDialog.getOpenFileName(self, "Choose the official Windows x64 EDSDK.dll", "", "Canon SDK (EDSDK.dll)")
+        if path:
+            selected = self.guarded(lambda: sdk_file(path))
+            if selected:
+                self.sdk_path.setText(str(selected))
+                QSettings().setValue("canon_sdk_path", str(selected))
+                self._buttons()
+
+    def connect_camera(self):
+        if not self._config["event_name"] or not any(p["eligible"] for p in self._students):
+            self.error("Set up an event and import students first, or open the separate camera test event.")
+            return
+        self.camera_action("connect", self.sdk_path.text())
+
+    def disconnect_camera(self):
+        if self.active:
+            answer = QMessageBox.question(self, "Unfinished camera session", "Disconnect and mark this session for review? Check transferred photos and keep the SD-card copy.")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        self.camera_action("disconnect")
+
+    def camera_action(self, command, payload=None):
+        if self.busy:
+            return
+        if self.camera_thread is None:
+            self.camera_thread = QThread(self)
+            self.camera_worker = CameraWorker(self.service)
+            self.camera_worker.moveToThread(self.camera_thread)
+            self.camera_thread.finished.connect(self.camera_worker.deleteLater)
+            self.camera_requested.connect(self.camera_worker.handle)
+            self.camera_worker.status.connect(self.camera_status_changed)
+            self.camera_worker.changed.connect(self.camera_data_changed)
+            self.camera_worker.completed.connect(self.camera_completed)
+            self.camera_worker.failed.connect(self.camera_failed)
+            self.camera_thread.start()
+        self.busy = True
+        self._buttons()
+        self.statusBar().showMessage({"start": "Preparing the camera for this student…", "finish": "Pausing the shutter and finishing transfers…", "connect": "Connecting to Canon…", "disconnect": "Disconnecting the camera…"}[command])
+        self.camera_requested.emit(command, payload)
+
+    def camera_status_changed(self, status):
+        self.camera_connected = status["connected"]
+        self.camera_name = status["name"]
+        self.camera_message = status["message"]
+
+    def camera_data_changed(self):
+        if not self.camera_refresh_timer.isActive():
+            self.camera_refresh_timer.start()
+
+    def camera_completed(self, command):
+        self.busy = False
+        if command in ("finish", "disconnect"):
+            self.found = None
+            self.confirm.setChecked(False)
+            self.search.clear()
+        self.refresh()
+        self.statusBar().showMessage(self.camera_message)
+        if command == "finish":
+            self.search.setFocus()
+        if self.close_after_camera:
+            self.close_after_camera = False
+            self.close()
+
+    def camera_failed(self, message):
+        self.busy = False
+        self.close_after_camera = False
+        self.confirm.setChecked(False)
+        self.refresh()
+        self.error(message)
+
+    def open_transfer_folder(self):
+        root = CameraInbox(self.root).root
+        root.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(root)))
+
+    def handle_camera_transfer(self):
+        receipt = self.selected(self.transfer_table)
+        if not receipt:
+            return
+        reason, accepted = QInputDialog.getMultiLineText(self, "Record transfer handling", "Where did you save this file, or how did you handle it?\nMarking it handled does not add it to the event backup.")
+        if accepted:
+            self.guarded(lambda: self.service.mark_camera_transfer_handled(receipt["receipt_key"], reason))
+            self.refresh()
 
     def _scroll_page(self, content):
         area = QScrollArea()
@@ -947,6 +1145,17 @@ class MainWindow(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
+        if self.camera_connected:
+            self.close_after_camera = True
+            self.camera_action("disconnect")
+            event.ignore()
+            return
+        if self.camera_thread and self.camera_thread.isRunning():
+            self.camera_thread.quit()
+            if not self.camera_thread.wait(3000):
+                self.error("The camera thread is still stopping. Please wait before closing.")
+                event.ignore()
+                return
         self.workspace_lock.unlock()
         event.accept()
 
@@ -981,7 +1190,7 @@ def self_test(report: Path, screenshot: Path | None = None) -> int:
         assert output.is_file()
         result = {"passed": True, "version": __version__, "synthetic_students": 5, "saved_photos": 2,
                   "picture_numbers": [asset["picture_number"] for asset in numbered],
-                  "backup_verified": True, "camera_implemented": False}
+                  "backup_verified": True, "canon_connector_implemented": True, "camera_hardware_tested": False}
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(json.dumps(result, indent=2), encoding="utf-8")
         window.close()

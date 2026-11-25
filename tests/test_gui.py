@@ -236,7 +236,8 @@ def test_how_to_is_available_and_explains_the_whole_flow(window, qtbot):
     for phrase in ("Set up the event", "Import the student list", "Find the student", "Confirm and start",
                    "Add the student's photos", "Finish and move to the next student", "Save a backup", "_P000123.jpg"):
         assert phrase in guide
-    assert "does not receive photos from a camera yet" in " ".join(guide.split())
+    assert "experimental Canon USB connector" in " ".join(guide.split())
+    assert "testcam1" in guide and "transfers need review" in guide
 
 
 def test_advanced_backup_tools_are_hidden_until_requested(window, qtbot):

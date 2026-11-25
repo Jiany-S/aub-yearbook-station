@@ -8,7 +8,9 @@
 - Run the packaged `--self-test` and installed `--self-test` on Windows.
 - Verify an empty first launch, demo isolation, backup restoration, and consolidation.
 - Attach the installer, portable ZIP, and SHA256SUMS to a GitHub preview release.
-- Describe live camera/RAW support accurately as pending.
+- Describe the Canon connector as experimental until hardware validation passes;
+  describe RAW import and other camera brands as pending.
+- Verify that Canon SDK files are excluded from source and release artifacts.
 - Keep installation files separate from user workspace data.
 
 The GitHub Actions workflow performs tests, packages both distributions,

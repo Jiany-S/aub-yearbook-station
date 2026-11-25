@@ -18,3 +18,8 @@ The Windows distribution includes installed license notices in `_internal/thirdp
   applications under their own license. https://pyinstaller.org/en/stable/license.html
 
 The setup installer is built with Inno Setup. https://jrsoftware.org/inno-setup
+
+The optional Canon connector loads an operator-supplied Canon EDSDK. Canon SDK
+binaries, headers, and samples are not bundled or covered by this project's MIT
+license. Obtain the SDK separately under Canon's terms:
+https://developers.canon-europe.com/

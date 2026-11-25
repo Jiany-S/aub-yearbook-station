@@ -9,8 +9,10 @@ p, li { line-height: 145%; } li { margin-bottom: 13px; } a { color: #7f2639; }
 </style></head><body>
 <h2>How to use Yearbook Station</h2>
 <p>Prepare the laptop once. Then repeat steps 3–6 for each student.</p>
-<p><b>This preview uses manual photo import.</b> It does not receive photos from a
-camera yet. Use <b>Try demo</b> to practice with sample students and pictures.</p>
+<p><b>Manual import is available immediately.</b> An experimental Canon USB
+connector is available under <b>Manage → Camera</b>. It requires Canon's official
+Windows x64 EDSDK and testing with your actual camera. Use <b>Try demo</b> to
+practice without a camera.</p>
 <ol>
 <li><h3>Set up the event</h3>Open <b>Photoshoot</b> and click <b>Set up event</b>.
 Enter the event name, such as Fall photoshoot, and a station code, such as ST01.
@@ -28,6 +30,8 @@ click <b>Start session</b>. The student stays locked to this session until you
 finish it. Searching for someone else is disabled while a session is active.</li>
 <li><h3>Add the student's photos</h3>Click <b>Add photos</b> and select the images
 from this laptop. In demo mode, click <b>Add sample photos</b> instead.
+With a connected Canon camera, take JPEG pictures using its shutter button;
+the app downloads them automatically. The shutter is paused between sessions.
 Wait until the images say <b>Saved</b>. Double-click a thumbnail to open a larger
 view. Selected source files are copied; the app keeps the originals.</li>
 <li><h3>Finish and move to the next student</h3>Check the saved photo count, then
@@ -39,6 +43,23 @@ drive. Wait for confirmation. The ZIP includes the student information and saved
 photos, so keep it in your team's private storage.</li>
 </ol>
 <h2>When something needs attention</h2>
+<p><b>Testing a Canon camera?</b> Open <b>Manage → Camera → Open separate camera
+test event</b>. This provides <b>testcam1</b> through <b>testcam5</b> and its own
+picture counter. In this event, choose <b>EDSDK.dll</b> from the official Windows
+64-bit SDK's DLL folder, then click <b>Connect camera</b>. Keep its companion DLLs
+together. Close EOS Utility and other camera apps. Use an SD card and JPEG-only
+image quality. Start a test student on Photoshoot before taking pictures.</p>
+<p><b>Camera transfers need review?</b> Missing capture times, unsupported files,
+and photos arriving from a finished session stay in the transfer review folder.
+They are never automatically moved to the next student. Under <b>Manage → Camera</b>,
+disconnect the camera and open that folder. Start the correct student, then use
+<b>Add photos</b> to recover a JPEG explicitly. For other files, copy them to private
+storage and use <b>Mark selected as handled</b> with a reason. These unassigned files
+are excluded from event backups; handle them before saving a backup.</p>
+<p><b>Camera disconnect or power loss?</b> The unfinished session needs review.
+Check its saved photos and the SD-card copy, then reconnect. Sessions never resume
+automatically. Do not change the camera clock during a connection. RAW import and
+live view are not part of this connector. Actual camera testing is still required.</p>
 <p><b>Student not listed?</b> Click <b>Student not listed?</b> on Photoshoot.
 Enter their name and any known ID or username. Leave unknown fields blank.
 This creates a temporary record for later checking. To match it to the official

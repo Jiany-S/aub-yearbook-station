@@ -1,13 +1,24 @@
-Windows preview of AUB Yearbook Station. Live camera integration is pending.
+Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
+The connector is implemented; physical EOS 700D testing is still pending.
 
-New in 0.4.0: a simpler Photoshoot / Students / How to use interface, readable
-colors even when Windows uses dark mode, and smaller scrollable pages that fit
-laptop screens. First launch guides you through event setup and student import.
-History, backups, and advanced tools are under Manage. The built-in guide explains
-the workflow step by step. Student selection stays locked during each session.
+New in 0.5.0:
+
+- Manage → Camera: select the official Windows x64 EDSDK and connect/disconnect.
+- Physical-shutter JPEG transfers, general numbering, thumbnails, and saving to
+  both the camera card and laptop.
+- Capture-time session boundaries, SDK transfer draining, and durable review of
+  late or uncertain files instead of assigning them to the next student.
+- A separate camera test event with testcam1–testcam5 and its own picture counter.
+- Recovery instructions in How to use; unresolved transfers block event backups.
+
+Canon's SDK is NOT included. Obtain the standard Windows 64-bit EDSDK separately
+through https://developers.canon-europe.com/, extract it, and choose EDSDK.dll from
+its x64 DLL folder. Keep companion DLLs beside it. Legacy 32-bit SDKs cannot load
+into this application. Restart the app before changing SDK folders.
 
 General picture numbering, existing event data, and backup compatibility are
-preserved. Close the old application before installing the update.
+preserved. Close the old application before installing the update. The installer
+updates in place; no uninstall is needed.
 
 Download **Windows-x64-Setup.exe** for the easiest installation. Run it, install
 for your Windows user, and launch **AUB Yearbook Station** from the Start menu.
@@ -22,10 +33,11 @@ verified ZIP backup/restore, and consolidation of independent station backups.
 The app starts empty. No student roster or photographs are included. Demo records
 load only when you explicitly open a separate demo workspace.
 
-Supported target: Windows 10/11, x64. Live tethering and RAW files await testing
-with the photography company's camera. This preview does not connect to a camera
-or automatically watch an incoming-photo folder. Unsigned preview executables
-may show a Windows publisher/SmartScreen prompt.
+Supported target: Windows 10/11, x64. For a camera test, close EOS Utility and
+other camera apps, connect one camera by USB, insert an SD card, and choose
+JPEG-only quality. RAW import, live view, and other camera brands are later work.
+Pass the physical test procedure in docs/canon-testing.md before event use.
+Unsigned preview executables may show a Windows publisher/SmartScreen prompt.
 
 Updates and uninstalling the app preserve workspace data, stored outside the
 installation directory. Keep verified backups on a separate drive. SHA-256

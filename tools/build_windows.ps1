@@ -16,6 +16,8 @@ try {
     $env:PATH = $originalBuildPath
 }
 if ($freezeResult -ne 0) { throw "Windows packaging failed" }
+$canonLibraries = Get-ChildItem -LiteralPath dist/AUBYearbookStation -Recurse -File | Where-Object { $_.Name -in 'EDSDK.dll','EdsImage.dll' }
+if ($canonLibraries) { throw "Canon SDK binaries must remain external to the public release" }
 & "$PSScriptRoot/align_msvc.ps1" -AppDirectory dist/AUBYearbookStation
 $appVersion = & $Python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
 New-Item -ItemType Directory -Force -Path dist-assets | Out-Null

@@ -35,3 +35,9 @@ screenshots/
 *.local.py
 dist-assets/
 self-test*.json
+# Canon SDK files are supplied locally under Canon's terms.
+canon-sdk/
+*.dll
+*.lib
+*.pdb
+EDSDK*.h

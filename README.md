@@ -4,14 +4,16 @@ A Windows desktop app for the AUB Campus Yearbook photoshoot team. Identify a
 student by AUB ID or username, confirm their details, and manage a local session
 containing their photographs.
 
-**Preview release: live camera integration is pending.** This version supports
-explicit manual photo import and a separate synthetic demo. It does not connect
-to a camera or automatically assign files arriving in a watched folder.
+**Preview release: the Canon USB connector is experimental and awaits hardware
+validation.** Manual photo import and a separate synthetic demo work without a
+camera SDK. Canon mode requires an operator-supplied Windows x64 EDSDK, accepts
+JPEG captures, and uses capture-time session boundaries rather than a folder
+watcher. RAW import and other camera brands are later work.
 
 ## Install and launch
 
 1. Open [GitHub Releases](https://github.com/Jiany-S/aub-yearbook-station/releases).
-2. Download **AUBYearbookStation-0.4.0-Windows-x64-Setup.exe**.
+2. Download **AUBYearbookStation-0.5.0-Windows-x64-Setup.exe**.
 3. Run the setup and launch **AUB Yearbook Station** from the Start menu.
 
 Python and Microsoft Excel are not required. Installation is per Windows user
@@ -53,6 +55,27 @@ backups, and common problems. For practice, choose **Try demo** there or on the
 first-launch screen. It contains five synthetic students (`demo1` through
 `demo5`). Start one and select **Add sample photos**. The event workspace stays
 separate and unchanged.
+
+## Test a Canon camera
+
+Use **Manage → Camera → Open separate camera test event** for an isolated event
+with usernames `testcam1` through `testcam5` and its own picture counter.
+Choose `EDSDK.dll` from Canon's official **Windows x64 EDSDK** package, keep its
+companion DLLs beside it, then connect one camera by USB and click **Connect
+camera**. SDK files are obtained separately through the
+[Canon Developer Programme](https://developers.canon-europe.com/).
+
+Use an SD card and JPEG-only capture, and close EOS Utility or other camera apps.
+Start a student session, take photographs with the camera's shutter button, then
+finish the session before changing students. The connector requests saving to
+both the camera card and laptop, pauses the shutter between sessions, and waits
+for Canon's transfer jobs when finishing.
+
+Transfers without a reliable capture-time match stay in a local review folder.
+Use **Manage → Camera** to recover them explicitly. Disconnect before event
+management and backup; unresolved transfers block backup creation.
+The EOS 700D is the initial test target; actual hardware testing is still pending.
+See the [Canon test procedure](docs/canon-testing.md) for requirements and limits.
 
 ## Storage, backups, and multiple stations
 

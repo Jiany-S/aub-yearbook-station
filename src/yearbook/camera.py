@@ -1,4 +1,4 @@
-"""Boundary for a later, hardware-tested tethering adapter. No folder auto-assignment."""
+"""Brand-independent capture boundary. Never assign by the student on screen."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,6 +12,11 @@ class CaptureEnvelope:
     source_path: Path
     captured_at: datetime | None = None
     source_kind: str = "manual"
+    receipt_key: str | None = None
+
+
+class CameraError(RuntimeError):
+    pass
 
 
 class CameraAdapter(Protocol):
@@ -23,4 +28,4 @@ class CameraAdapter(Protocol):
 
 class CameraNotConfigured:
     def connect(self) -> None:
-        raise NotImplementedError("Live camera capture is not included in this release.")
+        raise CameraError("Choose a camera connector before connecting.")
