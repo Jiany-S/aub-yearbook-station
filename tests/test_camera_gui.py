@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QMessageBox
 from yearbook.camera_worker import CameraWorker
 from yearbook.canon import CanonConnector
 from yearbook.gui import MainWindow
+from yearbook.camera import CameraError, CaptureEnvelope
 from test_canon import FakeCanon, FakeTime, jpeg
 
 
@@ -129,3 +130,112 @@ def test_opening_camera_test_closes_the_old_modal_dialog(qtbot, tmp_path):
     assert window.next_window.service.settings()["is_camera_test"]
     assert window.service.students() == []
     qtbot.addWidget(window.next_window)
+
+
+def test_usb_error_keeps_the_student_and_exposes_reconnect(qtbot, tmp_path, synthetic_roster, monkeypatch):
+    window, drivers = camera_window(qtbot, tmp_path, synthetic_roster, monkeypatch)
+    errors = []
+    window.error = errors.append
+    connect(qtbot, window)
+    begin(qtbot, window)
+    key, directory = window.active["session_key"], window.active["photo_directory"]
+    drivers[0].pending.append(("BEFORE.JPG", jpeg(drivers[0].clock())))
+    qtbot.waitUntil(lambda: window.active["photo_count"] == 1 and window.photos.count() == 1, timeout=10000)
+    original = window.service.assets(key)[0]
+    def lost_usb():
+        raise CameraError("USB cable disconnected")
+    drivers[0].on_poll = lost_usb
+    qtbot.waitUntil(lambda: not window.camera_connected and window.active["camera_paused"], timeout=10000)
+    assert window.active["session_key"] == key
+    assert window.reconnect_button.isVisible() and window.reconnect_button.isEnabled()
+    assert window.add_button.isVisible() and window.add_button.text() == "Recover photos"
+    assert not window.search.isEnabled()
+    assert len(window.service.sessions()) == 1
+    qtbot.mouseClick(window.reconnect_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: window.camera_connected and not window.busy, timeout=10000)
+    assert window.active["session_key"] == key and window.active["photo_directory"] == directory
+    drivers[-1].pending.append(("AFTER.JPG", jpeg(drivers[-1].clock())))
+    qtbot.waitUntil(lambda: (window.active["photo_count"] == 2 and window.photos.count() == 2) or len(errors) > 1, timeout=10000)
+    assert window.active["photo_count"] == 2, errors
+    assert window.service.assets(key)[0] == original
+    assert [a["picture_number"] for a in window.service.assets(key)] == [1, 2]
+    assert errors and "USB" in errors[0]
+
+
+def test_camera_can_connect_after_the_student_has_started(qtbot, tmp_path, synthetic_roster, monkeypatch):
+    window, drivers = camera_window(qtbot, tmp_path, synthetic_roster, monkeypatch)
+    begin(qtbot, window)
+    key = window.active["session_key"]
+    assert window.camera_connect_button.isEnabled()
+    connect(qtbot, window)
+    assert window.active["session_key"] == key
+    assert window.active["capture_mode"] == "canon" and not window.active["camera_paused"]
+    assert not drivers[0].locked
+
+
+def test_resume_after_restart_requires_identity_and_keeps_the_folder(qtbot, station, photo):
+    key = station.start_session(station.lookup("test1")["student_key"], identity_confirmed=True)
+    original = station.ingest(CaptureEnvelope(key, photo))
+    window = MainWindow(station.root)
+    qtbot.addWidget(window, before_close_func=lambda w: w.service.finish_session(key) if w.service.active_session() else None)
+    window.show()
+    assert window.resume_button.isVisible() and window.service.active_session() is None
+    qtbot.mouseClick(window.resume_button, Qt.MouseButton.LeftButton)
+    assert window.pending_resume == key and not window.confirm.isChecked()
+    assert not window.start_button.isEnabled()
+    qtbot.mouseClick(window.confirm, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(window.start_button, Qt.MouseButton.LeftButton)
+    assert window.active["session_key"] == key
+    assert window.photos.count() == 1
+    assert window.service.assets(key)[0]["relative_path"] == original["relative_path"]
+    qtbot.mouseClick(window.finish_button, Qt.MouseButton.LeftButton)
+    window.close()
+
+
+def test_resuming_a_camera_student_waits_for_reconnect(qtbot, station):
+    key = station.start_session(station.lookup("test1")["student_key"], identity_confirmed=True, capture_mode="canon")
+    window = MainWindow(station.root)
+    qtbot.addWidget(window, before_close_func=lambda w: w.service.finish_session(key) if w.service.active_session() else None)
+    window.show()
+    qtbot.mouseClick(window.resume_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(window.confirm, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(window.start_button, Qt.MouseButton.LeftButton)
+    assert window.active["session_key"] == key
+    assert window.active["camera_paused"]
+    assert window.reconnect_button.isVisible() and window.add_button.text() == "Recover photos"
+    qtbot.mouseClick(window.finish_button, Qt.MouseButton.LeftButton)
+    window.close()
+
+
+def test_camera_bursts_do_not_reload_saved_thumbnails(qtbot, tmp_path, synthetic_roster, monkeypatch):
+    window, drivers = camera_window(qtbot, tmp_path, synthetic_roster, monkeypatch)
+    connect(qtbot, window)
+    begin(qtbot, window)
+    import yearbook.gui as gui
+    original = gui.QImageReader
+    reads = []
+    def reader(path):
+        reads.append(path)
+        return original(path)
+    monkeypatch.setattr(gui,"QImageReader",reader)
+    driver = drivers[0]
+    for n in range(7):
+        driver.pending.append((f"BURST_{n}.JPG",jpeg(driver.clock())))
+    qtbot.waitUntil(lambda: window.active["photo_count"] == 7 and window.photos.count() == 7,timeout=10000)
+    assert len(reads) == 7
+    window.refresh_capture()
+    assert len(reads) == 7
+
+
+def test_repeated_connect_request_keeps_the_healthy_connection(qtbot, tmp_path, synthetic_roster, monkeypatch):
+    window, drivers = camera_window(qtbot, tmp_path, synthetic_roster, monkeypatch)
+    errors = []
+    window.error = errors.append
+    connect(qtbot,window)
+    begin(qtbot,window)
+    key = window.active["session_key"]
+    window.camera_action("connect","synthetic")
+    qtbot.waitUntil(lambda: not window.busy,timeout=10000)
+    assert window.camera_connected and not drivers[0].locked
+    assert window.active["session_key"] == key
+    assert "already connected" in errors[0]

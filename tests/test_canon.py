@@ -106,6 +106,8 @@ def test_physical_shutter_burst_saves_originals_and_general_numbers(camera):
     for n in range(5):
         driver.pending.append((f"IMG_{n:04d}.JPG", data))
     connector.poll()
+    assert len(driver.pending) == 1  # Burst polling yields after four downloads.
+    connector.poll()
     assets = connector.service.assets(key)
     assert len(assets) == 5
     assert [a["picture_number"] for a in assets] == [1, 2, 3, 4, 5]
@@ -241,18 +243,21 @@ def test_camera_clock_jump_cannot_reassign_a_picture(camera):
     assert len(connector.inbox.receipts(pending_only=True)) == 1
 
 
-def test_disconnect_flags_session_and_reconnection_does_not_resume_it(camera):
+def test_disconnect_preserves_student_and_reconnect_resumes_the_same_folder(camera):
     connector, driver, clock = camera
     key = begin(connector)
     connector.disconnect()
-    assert connector.service.active_session() is None
-    assert connector.service.sessions()[0]["state"] == "needs-review"
+    previous = connector.service.active_session()
+    assert previous["session_key"] == key
+    assert previous["camera_paused"]
     replacement = CanonConnector(connector.service, "unused", driver=driver, monotonic=clock.now, sleep=clock.sleep)
     replacement.connect()
     driver.pending.append(("AFTER.JPG", jpeg(driver.clock())))
     replacement.poll()
-    assert connector.service.assets(key) == []
-    assert replacement.current is None
+    assert len(connector.service.assets(key)) == 1
+    assert replacement.current.key == key
+    assert connector.service.active_session()["photo_directory"] == previous["photo_directory"]
+    assert not connector.service.active_session()["camera_paused"]
 
 
 def test_disconnection_with_late_sdk_jobs_marks_the_previous_session(camera):

@@ -8,7 +8,8 @@ h3 { font-size: 12pt; margin-bottom: 5px; }
 p, li { line-height: 145%; } li { margin-bottom: 13px; } a { color: #7f2639; }
 </style></head><body>
 <h2>How to use Yearbook Station</h2>
-<p>Prepare the laptop once. Then repeat steps 3–6 for each student.</p>
+<p>One event folder holds the whole shoot day. A student session is one visit
+within that event. Prepare the laptop once, then repeat steps 3–6 for each student.</p>
 <p><b>Manual import is available immediately.</b> An experimental Canon USB
 connector is available under <b>Manage → Camera</b>. It requires Canon's official
 Windows x64 EDSDK and testing with your actual camera. Use <b>Try demo</b> to
@@ -56,10 +57,24 @@ disconnect the camera and open that folder. Start the correct student, then use
 <b>Add photos</b> to recover a JPEG explicitly. For other files, copy them to private
 storage and use <b>Mark selected as handled</b> with a reason. These unassigned files
 are excluded from event backups; handle them before saving a backup.</p>
-<p><b>Camera disconnect or power loss?</b> The unfinished session needs review.
-Check its saved photos and the SD-card copy, then reconnect. Sessions never resume
-automatically. Do not change the camera clock during a connection. RAW import and
-live view are not part of this connector. Actual camera testing is still required.</p>
+<p><b>USB cable disconnected or camera powered off?</b> The current student and
+their photo folder stay selected. Plug the camera back in, turn it on, and click
+<b>Reconnect camera</b> on Photoshoot. Continue photographing that same student;
+you do not need to finish or start another visit. Already saved photos are kept,
+and repeated transfers do not get another picture number.</p>
+<p><b>Photos taken while unplugged?</b> They may be only on the SD card. Copy them
+to the laptop, then use <b>Recover photos</b> while that student is selected.
+Uncertain incoming files remain under <b>Manage → Camera</b> for explicit recovery.
+After finishing an interrupted visit, check the card and use <b>Mark reviewed</b>
+in History to record that all photographs have been accounted for.</p>
+<p><b>App crash or laptop power loss?</b> Reopen the same event folder. Saved
+photos and numbering are preserved. Click <b>Resume unfinished student</b>, check
+the displayed details, tick the identity box, and click <b>Resume student</b>.
+Reconnect the camera if needed. This keeps the same visit and folder. You may
+also start another student or another visit; previous photos are retained in
+their own student folder. Capture never resumes before an explicit operator action.</p>
+<p>Do not change the camera clock during a connection. RAW import and live view
+are not part of this connector. Test the actual shoot-day camera and cable.</p>
 <p><b>Student not listed?</b> Click <b>Student not listed?</b> on Photoshoot.
 Enter their name and any known ID or username. Leave unknown fields blank.
 This creates a temporary record for later checking. To match it to the official
@@ -79,7 +94,8 @@ Students have folders named <b>AUBID_username</b>, with visits such as
 <b>2026-11-26_session-01</b> inside. Retakes on the same day get separate session
 numbers. Opening an older event organizes saved photos automatically and keeps
 their filenames and picture numbers. Use the app to manage photos so their links
-stay correct.</p>
+stay correct. <b>Open student folder</b> opens the selected student's folder.
+Use the same event workspace throughout the day, including after a restart.</p>
 <p>New filenames end in a general picture number such as <b>_P000123.jpg</b>.
 It continues across students, sessions, event folders, and restarts in the same
 Windows profile. The thumbnail shows this number too. A failed save can leave

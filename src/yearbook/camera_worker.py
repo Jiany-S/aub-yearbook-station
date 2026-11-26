@@ -31,13 +31,13 @@ class CameraWorker(QObject):
             "message": self.message,
         })
 
-    def _disconnect(self):
+    def _disconnect(self, *, finalize=False):
         if self.timer:
             self.timer.stop()
         errors = []
         try:
             if self.connector:
-                errors = self.connector.disconnect()
+                errors = self.connector.disconnect(preserve_session=not finalize)
         except Exception as exc:
             errors.append(str(exc))
         finally:
@@ -45,15 +45,19 @@ class CameraWorker(QObject):
                 self.lock.unlock()
                 self.lock = None
         self.message = "Camera disconnected. Check the SD card if any transfers were interrupted."
+        if self.service.active_session():
+            self.message = "Camera paused. The same student and folder are still selected. Reconnect to continue; check the SD card for offline photos."
         if errors:
             self.message += " Camera settings could not be fully restored; power-cycle it before reuse."
 
     @Slot(str, object)
     def handle(self, command, payload):
+        connecting = False
         try:
             if command == "connect":
                 if self.connector and self.connector.connected:
                     raise CameraError("The Canon camera is already connected.")
+                connecting = True
                 root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "AUBYearbookStation"
                 root.mkdir(parents=True, exist_ok=True)
                 self.lock = QLockFile(str(root / ".canon-camera.lock"))
@@ -68,15 +72,16 @@ class CameraWorker(QObject):
                     self.timer.setInterval(100)
                     self.timer.timeout.connect(self.poll)
                 self.timer.start()
-                self.message = f"{self.connector.name} connected. Start a student session to enable the shutter."
-            elif command == "start":
+                self.message = ("Camera ready for the same student. Continue shooting; existing photos and numbering are preserved."
+                                if self.service.active_session() else f"{self.connector.name} connected. Start a student session to enable the shutter.")
+            elif command in ("start", "resume"):
                 if not self.connector or not self.connector.connected:
                     raise CameraError("Reconnect the Canon camera before starting.")
-                key = self.service.start_session(payload["student_key"], identity_confirmed=payload["confirmed"])
+                key = (self.service.resume_session(payload["session_key"], identity_confirmed=payload["confirmed"])
+                       if command == "resume" else self.service.start_session(payload["student_key"], identity_confirmed=payload["confirmed"], capture_mode="canon"))
                 try:
                     self.connector.start_session(key)
                 except BaseException:
-                    self.service.flag_session_review(key, "The Canon camera could not arm this session. No next student was selected.")
                     self._disconnect()
                     raise
                 self.message = "Camera ready. Take JPEG photos with the camera's shutter button."
@@ -87,12 +92,12 @@ class CameraWorker(QObject):
                 self.connector.drain_session(active["session_key"])
                 self.service.finish_session(active["session_key"])
                 self.message = "Session finished. Camera shutter paused until the next student starts."
-            elif command == "disconnect":
-                self._disconnect()
+            elif command in ("disconnect", "shutdown"):
+                self._disconnect(finalize=command == "shutdown")
             else:
                 raise CameraError("Unknown camera action.")
         except Exception as exc:
-            if command == "connect" or isinstance(exc, CameraClockError):
+            if connecting or isinstance(exc, CameraClockError):
                 self._disconnect()
             self._emit_status()
             self.changed.emit()

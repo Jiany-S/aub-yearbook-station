@@ -71,6 +71,23 @@ finish the session before changing students. The connector requests saving to
 both the camera card and laptop, pauses the shutter between sessions, and waits
 for Canon's transfer jobs when finishing.
 
+The event workspace represents the whole shoot day; each student has one
+`AUBID_username` folder, with separate visits inside it. Keep using that workspace
+after a restart. **Open student folder** opens the current student's photos.
+
+If USB disconnects or the camera powers off, the selected student and visit stay
+open. Reconnect the cable, turn on the camera, and click **Reconnect camera** on
+Photoshoot. Existing photos and numbering are preserved. Photos taken while
+unplugged may remain only on the SD card: copy them to the laptop and use
+**Recover photos** for the same selected student. Interrupted visits require an
+SD-card check in History before marking them reviewed.
+
+After an app crash, reopen the same event and click **Resume unfinished student**.
+Confirm the displayed identity, then **Resume student**, and reconnect if needed.
+The same visit and folder continue. Starting another visit also preserves all
+earlier photos. Camera capture never resumes without an explicit operator action.
+Verified camera replays do not create duplicate photos or consume new numbers.
+
 Transfers without a reliable capture-time match stay in a local review folder.
 Use **Manage → Camera** to recover them explicitly. Disconnect before event
 management and backup; unresolved transfers block backup creation.

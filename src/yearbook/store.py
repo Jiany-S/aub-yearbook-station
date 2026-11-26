@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from .roster import Roster, RosterValidationError, student_dict
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 BASE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS students (
     student_key TEXT PRIMARY KEY,
@@ -66,6 +66,15 @@ PHOTO_FOLDER_SCHEMA = """
 ALTER TABLE sessions ADD COLUMN photo_directory TEXT;
 CREATE UNIQUE INDEX session_photo_directory ON sessions(photo_directory COLLATE NOCASE);
 """
+RECOVERY_SCHEMA = """
+ALTER TABLE sessions ADD COLUMN capture_mode TEXT NOT NULL DEFAULT 'manual' CHECK(capture_mode IN ('manual','canon'));
+ALTER TABLE sessions ADD COLUMN camera_paused INTEGER NOT NULL DEFAULT 0 CHECK(camera_paused IN (0,1));
+ALTER TABLE sessions ADD COLUMN interrupted INTEGER NOT NULL DEFAULT 0 CHECK(interrupted IN (0,1));
+UPDATE sessions SET capture_mode='canon' WHERE session_key IN (SELECT session_key FROM assets WHERE source_kind='canon');
+ALTER TABLE assets ADD COLUMN camera_fingerprint TEXT;
+CREATE UNIQUE INDEX camera_capture_once ON assets(camera_fingerprint) WHERE status IN ('pending','staged','ready');
+CREATE INDEX camera_saved_source ON assets(original_name COLLATE NOCASE,sha256) WHERE status='ready' AND source_kind='canon';
+"""
 
 
 def utc_now() -> str:
@@ -99,7 +108,7 @@ class RosterStore(AbstractContextManager):
         self.connection.execute("PRAGMA foreign_keys=ON")
         try:
             version = self.connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, SCHEMA_VERSION) or (read_only and version != SCHEMA_VERSION):
+            if version not in (0, 1, 2, 3, 4, SCHEMA_VERSION) or (read_only and version != SCHEMA_VERSION):
                 raise RosterValidationError("Unsupported database version; open it with the desktop app to migrate it.")
             if not read_only:
                 if version == 0:
@@ -121,7 +130,9 @@ class RosterStore(AbstractContextManager):
                         )
                     if version < 3:
                         migration += NUMBERING_SCHEMA
-                    migration += PHOTO_FOLDER_SCHEMA
+                    if version < 4:
+                        migration += PHOTO_FOLDER_SCHEMA
+                    migration += RECOVERY_SCHEMA
                     self.connection.executescript(
                         "BEGIN IMMEDIATE;\n" + migration
                         + f"\nPRAGMA user_version={SCHEMA_VERSION};\nCOMMIT;"

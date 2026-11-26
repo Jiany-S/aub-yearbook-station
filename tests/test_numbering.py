@@ -138,5 +138,5 @@ def test_version_two_upgrade_preserves_existing_filenames(tmp_path):
         assert asset["sequence"] == 1
         assert asset["picture_number"] is None
         assert asset["numbering_machine_id"] is None
-        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == 5
     assert not default_counter_path().exists()

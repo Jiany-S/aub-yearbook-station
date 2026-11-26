@@ -177,6 +177,10 @@ class MainWindow(QMainWindow):
             self.workspace_lock.unlock()
             raise
         self.found = None
+        self.pending_resume = None
+        self.resume_candidate = None
+        self.displayed_session = None
+        self.photo_signatures = {}
         self.active = None
         self.busy = False
         self.task = None
@@ -190,7 +194,7 @@ class MainWindow(QMainWindow):
         self.camera_refresh_timer = QTimer(self)
         self.camera_refresh_timer.setSingleShot(True)
         self.camera_refresh_timer.setInterval(150)
-        self.camera_refresh_timer.timeout.connect(self.refresh)
+        self.camera_refresh_timer.timeout.connect(self.refresh_capture)
         self._config = self.service.settings()
         self._students = []
         self._sessions = []
@@ -404,6 +408,7 @@ class MainWindow(QMainWindow):
         sessions = self.service.sessions()
         self._config, self._students, self._sessions = config, students, sessions
         self.active = next((s for s in sessions if s["state"] in ("active", "draining")), None)
+        self.resume_candidate = next((s for s in sessions if s["state"] == "needs-review" and s.get("interrupted")), None)
         count = sum(p["eligible"] for p in students)
         self.heading.setText("Yearbook Station")
         student_label = "student" if count == 1 else "students"
@@ -412,6 +417,8 @@ class MainWindow(QMainWindow):
             banner = "DEMO · Sample students only. Add sample photos to practice."
         elif self.camera_connected:
             banner = f"{self.camera_name} connected · JPEG photos transfer automatically during the active session."
+        elif self.active and self.active["capture_mode"] == "canon":
+            banner = "Camera paused · The same student and folder are still selected. Reconnect to continue."
         else:
             banner = "Manual mode: add photos from this laptop. Connect a Canon camera under Manage → Camera."
         if config.get("is_camera_test"):
@@ -433,6 +440,8 @@ class MainWindow(QMainWindow):
         else:
             self.active_card.setText("Student photos")
             self.photos.clear()
+            self.displayed_session = None
+            self.photo_signatures.clear()
             self.photo_empty.setText("Photos will appear here.\nFind a student, confirm their details, then start the session.")
             self.photo_stack.setCurrentIndex(0)
             self.photo_hint.setText("New filenames include the laptop's general picture number.")
@@ -492,6 +501,27 @@ class MainWindow(QMainWindow):
             else:
                 self.statusBar().showMessage("Find a student to begin the next session.")
 
+    def refresh_capture(self):
+        """A camera burst need not rebuild the roster and all historical visits."""
+        active = self.service.active_session()
+        if not active or self.management_dialog.isVisible():
+            self.refresh()
+            return
+        self.active = active
+        self.active_card.setText(f"{full_name(active['person'])} · Saved photos: {active['photo_count']}")
+        self._photos(active["session_key"])
+        self._found_card()
+        self.camera_status.setText(self.camera_message)
+        note = (f"{self.camera_name} connected · Photos save under the current student."
+                if self.camera_connected else "Camera paused · The same student and folder are still selected. Reconnect to continue.")
+        if self._config.get("is_camera_test"):
+            note = "CAMERA TEST · " + note
+        transfers = self.service.camera_transfers()
+        if transfers:
+            note += f" · {len(transfers)} transfer(s) need review under Manage → Camera."
+        self.banner.setText(note)
+        self._buttons()
+
 
     @staticmethod
     def _row(table, row, values, payload):
@@ -523,6 +553,11 @@ class MainWindow(QMainWindow):
         operational = bool(config["event_name"]) and any(p["eligible"] for p in self._students)
         eligible = bool(self.found) and self.found.get("eligible", True)
         self.start_button.setVisible(idle)
+        self.start_button.setText("Resume student" if self.pending_resume else "Start session")
+        self.resume_button.setVisible(idle and bool(self.resume_candidate) and not self.pending_resume)
+        self.resume_button.setEnabled(ready and idle)
+        if self.resume_candidate:
+            self.resume_button.setText(f"Resume unfinished student ({self.resume_candidate['photo_count']} saved photos)")
         self.finish_button.setVisible(not idle)
         self.confirm.setVisible(idle)
         self.provisional_button.setVisible(idle)
@@ -530,7 +565,13 @@ class MainWindow(QMainWindow):
         self.confirm.setEnabled(ready and idle and eligible)
         self.search_button.setEnabled(ready and idle and operational)
         self.search.setEnabled(ready and idle and operational)
+        camera_paused = bool(self.active and self.active["capture_mode"] == "canon" and not self.camera_connected)
+        self.reconnect_button.setVisible(camera_paused)
+        self.reconnect_button.setEnabled(ready and camera_paused and bool(self.sdk_path.text()))
+        self.student_folder_button.setVisible(bool(self.active))
+        self.student_folder_button.setEnabled(ready and not idle)
         self.add_button.setVisible(bool(self.active) and not config["is_demo"] and not self.camera_connected)
+        self.add_button.setText("Recover photos" if camera_paused else "Add photos")
         self.simulate_button.setVisible(bool(self.active) and config["is_demo"])
         for widget in (self.add_button, self.simulate_button, self.finish_button):
             widget.setEnabled(ready and not idle)
@@ -547,7 +588,7 @@ class MainWindow(QMainWindow):
             widget.setText("Demo is open" if config["is_demo"] else "Try demo")
             widget.setEnabled(ready and idle and not config["is_demo"] and not self.camera_connected)
         self.sdk_button.setEnabled(ready and idle and not self.camera_connected)
-        self.camera_connect_button.setEnabled(ready and idle and operational and not self.camera_connected and not config["is_demo"] and bool(self.sdk_path.text()))
+        self.camera_connect_button.setEnabled(ready and operational and not self.camera_connected and not config["is_demo"] and bool(self.sdk_path.text()))
         self.camera_disconnect_button.setEnabled(ready and self.camera_connected)
         self.camera_test_button.setEnabled(ready and idle and not self.camera_connected and not config.get("is_camera_test"))
         self.transfer_handled_button.setEnabled(ready and idle and not self.camera_connected and bool(self.selected(self.transfer_table)))
@@ -566,7 +607,8 @@ class MainWindow(QMainWindow):
         if self.busy:
             hint = "Saving… wait until this operation finishes."
         elif self.active:
-            hint = ("Take JPEG photos with the camera. Check the saved count, then finish before the next student."
+            hint = ("Reconnect to keep photographing this student. Recover photos can add files copied from the SD card to this same visit."
+                    if camera_paused else "Take JPEG photos with the camera. Check the saved count, then finish before the next student."
                     if self.camera_connected else "Add this student's photos, then finish before moving to the next student.")
         elif not self.found:
             hint = "Enter an AUB ID or username and click Find."
@@ -580,11 +622,22 @@ class MainWindow(QMainWindow):
 
 
     def _photos(self, session_key):
-        self.photos.clear()
+        if self.displayed_session != session_key:
+            self.photos.clear()
+            self.photo_signatures.clear()
+            self.displayed_session = session_key
+        items = {self.photos.item(i).data(Qt.ItemDataRole.UserRole)["asset_key"]: self.photos.item(i) for i in range(self.photos.count())}
         for asset in self.service.assets(session_key):
+            signature = tuple(asset.get(k) for k in ("status", "relative_path", "sha256", "picture_number", "error_text"))
+            if self.photo_signatures.get(asset["asset_key"]) == signature:
+                continue
             title = f"Picture #{asset['picture_number']:06d}" if asset.get("picture_number") is not None else f"Photo {asset['sequence']:02d}"
             status = {"ready": "Saved", "pending": "Saving", "staged": "Saving", "failed": "Needs review"}[asset["status"]]
-            item = QListWidgetItem(f"{title}\n{status}")
+            item = items.get(asset["asset_key"])
+            if item is None:
+                item = QListWidgetItem()
+                self.photos.addItem(item)
+            item.setText(f"{title}\n{status}")
             item.setData(Qt.ItemDataRole.UserRole, asset)
             item.setToolTip(asset["relative_path"] + ("\n" + asset["error_text"] if asset["error_text"] else ""))
             if asset["status"] == "ready":
@@ -594,7 +647,7 @@ class MainWindow(QMainWindow):
                 image = reader.read()
                 if not image.isNull():
                     item.setIcon(QIcon(QPixmap.fromImage(image)))
-            self.photos.addItem(item)
+            self.photo_signatures[asset["asset_key"]] = signature
         self.photo_stack.setCurrentIndex(1 if self.photos.count() else 0)
         self.photo_empty.setText("No photos saved yet.\nClick Add photos to choose this student's pictures."
                                  if not self._config["is_demo"] else "No sample photos yet.\nClick Add sample photos to practice.")
@@ -637,6 +690,7 @@ class MainWindow(QMainWindow):
         if self.active or self.busy:
             return
         def operation():
+            self.pending_resume = None
             query = self.search.text().strip()
             self.found = self.service.lookup(query) if query else None
             self.confirm.setChecked(False)
@@ -655,12 +709,35 @@ class MainWindow(QMainWindow):
         if not self.found:
             return
         if self.camera_connected:
-            self.camera_action("start", {"student_key": self.found["student_key"], "confirmed": self.confirm.isChecked()})
+            self.camera_action("resume" if self.pending_resume else "start", {"student_key": self.found["student_key"], "session_key": self.pending_resume, "confirmed": self.confirm.isChecked()})
             return
         def operation():
-            self.service.start_session(self.found["student_key"], identity_confirmed=self.confirm.isChecked())
+            if self.pending_resume:
+                self.service.resume_session(self.pending_resume, identity_confirmed=self.confirm.isChecked())
+            else:
+                self.service.start_session(self.found["student_key"], identity_confirmed=self.confirm.isChecked())
+            self.pending_resume = None
             self.refresh()
         self.guarded(operation)
+
+    def load_interrupted(self):
+        if self.busy or self.active or not self.resume_candidate:
+            return
+        session = self.resume_candidate
+        self.pending_resume = session["session_key"]
+        person = session["person"]
+        identifier = person.get("student_id") or person.get("username")
+        self.found = self.service.lookup(identifier) if identifier else {**person, "student_key": session["student_key"]}
+        self.search.setText(identifier or "Temporary student")
+        self.confirm.setChecked(False)
+        self.search_feedback.setText("Check this student's identity, then resume their saved visit and folder.")
+        self.refresh()
+
+    def open_student_folder(self):
+        if self.active:
+            path = safe_path(self.root, self.active["photo_directory"]).parent
+            path.mkdir(parents=True, exist_ok=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def finish(self):
         if self.active and self.camera_connected:
@@ -933,10 +1010,6 @@ class MainWindow(QMainWindow):
         self.camera_action("connect", self.sdk_path.text())
 
     def disconnect_camera(self):
-        if self.active:
-            answer = QMessageBox.question(self, "Unfinished camera session", "Disconnect and mark this session for review? Check transferred photos and keep the SD-card copy.")
-            if answer != QMessageBox.StandardButton.Yes:
-                return
         self.camera_action("disconnect")
 
     def camera_action(self, command, payload=None):
@@ -955,7 +1028,7 @@ class MainWindow(QMainWindow):
             self.camera_thread.start()
         self.busy = True
         self._buttons()
-        self.statusBar().showMessage({"start": "Preparing the camera for this student…", "finish": "Pausing the shutter and finishing transfers…", "connect": "Connecting to Canon…", "disconnect": "Disconnecting the camera…"}[command])
+        self.statusBar().showMessage({"start": "Preparing the camera for this student…", "resume": "Resuming the unfinished student…", "finish": "Pausing the shutter and finishing transfers…", "connect": "Connecting to Canon…", "disconnect": "Pausing the camera; keeping the student selected…", "shutdown": "Closing the camera connection…"}[command])
         self.camera_requested.emit(command, payload)
 
     def camera_status_changed(self, status):
@@ -969,7 +1042,9 @@ class MainWindow(QMainWindow):
 
     def camera_completed(self, command):
         self.busy = False
-        if command in ("finish", "disconnect"):
+        if command in ("start", "resume"):
+            self.pending_resume = None
+        if command in ("finish", "shutdown"):
             self.found = None
             self.confirm.setChecked(False)
             self.search.clear()
@@ -1062,6 +1137,8 @@ class MainWindow(QMainWindow):
         left.addLayout(search_row)
         self.search_feedback = label("", "validationError")
         left.addWidget(self.search_feedback)
+        self.resume_button = button("Resume unfinished student", self.load_interrupted, "resumeInterrupted")
+        left.addWidget(self.resume_button)
         self.student_card = QLabel()
         self.student_card.setObjectName("studentCard")
         self.student_card.setWordWrap(True)
@@ -1093,8 +1170,12 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         self.add_button = button("Add photos", self.add_photos, "addPhotos", True)
         self.simulate_button = button("Add sample photos", self.simulate, "simulatePhotos", True)
+        self.reconnect_button = button("Reconnect camera", self.connect_camera, "reconnectCamera", True)
+        self.student_folder_button = button("Open student folder", self.open_student_folder, "openStudentFolder")
         actions.addWidget(self.add_button)
         actions.addWidget(self.simulate_button)
+        actions.addWidget(self.reconnect_button)
+        actions.addWidget(self.student_folder_button)
         actions.addStretch()
         right.addLayout(actions)
         self.photo_stack = QStackedWidget()
@@ -1143,6 +1224,7 @@ class MainWindow(QMainWindow):
         if self.active or self.busy:
             return
         self.found = None
+        self.pending_resume = None
         self.confirm.setChecked(False)
         self.search_feedback.setText("")
         self._found_card()
@@ -1160,7 +1242,7 @@ class MainWindow(QMainWindow):
                 return
         if self.camera_connected:
             self.close_after_camera = True
-            self.camera_action("disconnect")
+            self.camera_action("shutdown")
             event.ignore()
             return
         if self.camera_thread and self.camera_thread.isRunning():

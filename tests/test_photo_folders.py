@@ -1,6 +1,7 @@
 """Readable storage paths and recoverable upgrades of existing photographs."""
 
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 from zipfile import ZipFile
@@ -166,11 +167,22 @@ def test_old_schema_backup_restores_and_upgrades(station, photo, tmp_path):
     with ZipFile(backup) as archive:
         database.write_bytes(archive.read("station.sqlite3"))
         contents = {name: archive.read(name) for name in archive.namelist()}
-    with sqlite3.connect(database) as connection:
-        connection.executescript("DROP INDEX session_photo_directory; ALTER TABLE sessions DROP COLUMN photo_directory; PRAGMA user_version=3;")
+    # Close the WAL connection before reading database bytes into the archive.
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.executescript(
+            "DROP INDEX camera_capture_once; DROP INDEX camera_saved_source;"
+            "ALTER TABLE assets DROP COLUMN camera_fingerprint;"
+            "ALTER TABLE sessions DROP COLUMN capture_mode; ALTER TABLE sessions DROP COLUMN camera_paused;"
+            "ALTER TABLE sessions DROP COLUMN interrupted;"
+            "DROP INDEX session_photo_directory; ALTER TABLE sessions DROP COLUMN photo_directory; PRAGMA user_version=3;"
+        )
     manifest = json.loads(contents["manifest.json"])
     for entry in manifest["sessions"]:
         entry.pop("photo_directory")
+        for column in ("capture_mode", "camera_paused", "interrupted"):
+            entry.pop(column)
+    for entry in manifest["assets"]:
+        entry.pop("camera_fingerprint")
     contents["manifest.json"] = json.dumps(manifest).encode()
     contents["station.sqlite3"] = database.read_bytes()
     old_backup = tmp_path / "v3.zip"

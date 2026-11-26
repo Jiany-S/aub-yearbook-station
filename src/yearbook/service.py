@@ -190,13 +190,22 @@ class StationService:
             return [{**dict(r), "person": {**json.loads(r["payload_json"]), "is_provisional": r["provisional"] == 1}} for r in rows]
 
     def active_session(self) -> dict | None:
-        return next((s for s in self.sessions() if s["state"] in ("active", "draining")), None)
+        with RosterStore(self.database, read_only=True) as store:
+            row = store.connection.execute(
+                "SELECT s.*,p.payload_json,p.provisional,"
+                "(SELECT COUNT(*) FROM assets a WHERE a.session_key=s.session_key AND a.status='ready') photo_count "
+                "FROM sessions s JOIN students p USING(student_key) WHERE s.state IN ('active','draining') LIMIT 1"
+            ).fetchone()
+            return ({**dict(row), "person": {**json.loads(row["payload_json"]), "is_provisional": row["provisional"] == 1}}
+                    if row else None)
 
-    def start_session(self, person_key: str, *, identity_confirmed: bool) -> str:
+    def start_session(self, person_key: str, *, identity_confirmed: bool, capture_mode: str = "manual") -> str:
         if not identity_confirmed:
             raise StationError("Confirm the student's identity before starting.")
         if not self.settings()["event_name"]:
             raise StationError("Set up the event before starting a session.")
+        if capture_mode not in ("manual", "canon"):
+            raise StationError("Choose a supported capture mode.")
         with RosterStore(self.database) as store, atomic(store.connection):
             self._require_idle(store)
             person = store.get_student(person_key)
@@ -205,13 +214,50 @@ class StationService:
                 raise StationError("This student is not in the current roster. Review their eligibility first.")
             key = str(uuid4())
             store.connection.execute(
-                "INSERT INTO sessions(session_key,student_key,identity_json,state,started_at) VALUES (?,?,?,'active',?)",
-                (key, person_key, json.dumps(person, ensure_ascii=False), utc_now()),
+                "INSERT INTO sessions(session_key,student_key,identity_json,state,started_at,capture_mode,camera_paused) VALUES (?,?,?,'active',?,?,?)",
+                (key, person_key, json.dumps(person, ensure_ascii=False), utc_now(), capture_mode, int(capture_mode == "canon")),
             )
             session = store.connection.execute("SELECT * FROM sessions WHERE session_key=?", (key,)).fetchone()
             self._photo_directory(store, session)
             store.audit("session-started", key, {"person_key": person_key})
             return key
+
+    def resume_session(self, session_key: str, *, identity_confirmed: bool) -> str:
+        if not identity_confirmed:
+            raise StationError("Confirm the student's identity before resuming.")
+        with RosterStore(self.database) as store, atomic(store.connection):
+            self._require_idle(store)
+            session = store.connection.execute("SELECT * FROM sessions WHERE session_key=?", (session_key,)).fetchone()
+            if not session or session["state"] != "needs-review" or not session["interrupted"]:
+                raise StationError("Choose an unfinished student visit recovered after an interruption.")
+            member = store.connection.execute("SELECT eligible FROM roster_membership WHERE student_key=?", (session["student_key"],)).fetchone()
+            if not member or not member[0]:
+                raise StationError("This student is not in the current roster. Review their eligibility first.")
+            if store.connection.execute("SELECT 1 FROM assets WHERE session_key=? AND status IN ('pending','staged')", (session_key,)).fetchone():
+                raise StationError("Recover pending photos before resuming the student.")
+            store.connection.execute(
+                "UPDATE sessions SET state='active',ended_at=NULL,interrupted=0,camera_paused=(capture_mode='canon') WHERE session_key=?",
+                (session_key,),
+            )
+            store.audit("session-resumed", session_key)
+        return session_key
+
+    def pause_camera_session(self, session_key: str, reason: str, *, review: bool = True):
+        with RosterStore(self.database) as store, atomic(store.connection):
+            session = store.connection.execute("SELECT * FROM sessions WHERE session_key=?", (session_key,)).fetchone()
+            if not session or session["state"] not in ("active", "draining"):
+                raise StationError("There is no active student to reconnect.")
+            store.connection.execute("UPDATE sessions SET capture_mode='canon',camera_paused=1,state='active' WHERE session_key=?", (session_key,))
+            if review and not session["camera_paused"]:
+                store.audit("camera-session-paused", session_key, {"reason": reason})
+
+    def camera_session_ready(self, session_key: str):
+        with RosterStore(self.database) as store, atomic(store.connection):
+            session = store.connection.execute("SELECT state FROM sessions WHERE session_key=?", (session_key,)).fetchone()
+            if not session or session[0] != "active":
+                raise StationError("The selected student is no longer active.")
+            store.connection.execute("UPDATE sessions SET capture_mode='canon',camera_paused=0 WHERE session_key=?", (session_key,))
+            store.audit("camera-session-armed", session_key)
 
     def _photo_directory(self, store, session) -> str:
         """Freeze a readable, collision-free directory for this visit."""
@@ -332,9 +378,9 @@ class StationService:
                 raise StationError("Wait for all photos to finish saving before finishing the session.")
             failed = store.connection.execute("SELECT 1 FROM assets WHERE session_key=? AND status='failed'", (session_key,)).fetchone()
             camera_review = store.connection.execute(
-                "SELECT 1 FROM audit_log WHERE action='camera-transfer-review' AND entity_key=? LIMIT 1", (session_key,)
+                "SELECT 1 FROM audit_log WHERE action IN ('camera-transfer-review','camera-session-paused') AND entity_key=? LIMIT 1", (session_key,)
             ).fetchone()
-            store.connection.execute("UPDATE sessions SET state=?,ended_at=?,notes=? WHERE session_key=?",
+            store.connection.execute("UPDATE sessions SET state=?,ended_at=?,notes=?,camera_paused=0,interrupted=0 WHERE session_key=?",
                                      ("needs-review" if failed or camera_review else "completed", utc_now(), notes.strip(), session_key))
             store.audit("session-finished", session_key)
 
@@ -345,7 +391,8 @@ class StationService:
     def flag_session_review(self, session_key: str, reason: str):
         with RosterStore(self.database) as store, atomic(store.connection):
             store.connection.execute(
-                "UPDATE sessions SET state='needs-review',ended_at=COALESCE(ended_at,?),notes=CASE WHEN notes='' THEN ? ELSE notes || char(10) || ? END WHERE session_key=?",
+                "UPDATE sessions SET interrupted=CASE WHEN state IN ('active','draining') THEN 1 ELSE interrupted END,"
+                "state='needs-review',ended_at=COALESCE(ended_at,?),notes=CASE WHEN notes='' THEN ? ELSE notes || char(10) || ? END WHERE session_key=?",
                 (utc_now(), reason, reason, session_key),
             )
             store.audit("camera-session-interrupted", session_key, {"reason": reason})
@@ -386,7 +433,7 @@ class StationService:
             if store.connection.execute("SELECT 1 FROM assets WHERE session_key=? AND status IN ('pending','staged')", (session_key,)).fetchone():
                 raise StationError("Pending files must be recovered before completing review.")
             changed = store.connection.execute(
-                "UPDATE sessions SET state='completed',ended_at=COALESCE(ended_at,?),notes=? WHERE session_key=? AND state='needs-review'",
+                "UPDATE sessions SET state='completed',ended_at=COALESCE(ended_at,?),notes=?,interrupted=0,camera_paused=0 WHERE session_key=? AND state='needs-review'",
                 (utc_now(), notes.strip(), session_key),
             ).rowcount
             if not changed:
@@ -410,6 +457,29 @@ class StationService:
         with RosterStore(self.database, read_only=True) as store:
             return [dict(r) for r in store.connection.execute("SELECT * FROM assets WHERE session_key=? ORDER BY sequence", (session_key,))]
 
+    @staticmethod
+    def camera_fingerprint(receipt) -> str:
+        return sha256(json.dumps([receipt["original_name"].casefold(), receipt["sha256"]], ensure_ascii=False).encode()).hexdigest()
+
+    def camera_duplicate(self, receipt) -> dict | None:
+        """Only discard a replay when its committed original is still verified."""
+        with RosterStore(self.database, read_only=True) as store:
+            row = store.connection.execute(
+                "SELECT * FROM assets WHERE status IN ('pending','staged','ready') AND status='ready' AND camera_fingerprint=? LIMIT 1",
+                (self.camera_fingerprint(receipt),),
+            ).fetchone()
+            if row is None:
+                row = store.connection.execute(
+                    "SELECT * FROM assets WHERE status='ready' AND source_kind='canon' AND original_name=? COLLATE NOCASE AND sha256=? LIMIT 1",
+                    (receipt["original_name"], receipt["sha256"]),
+                ).fetchone()
+        if row:
+            saved = safe_path(self.root, row["relative_path"])
+            if not saved.is_file() or checksum(saved) != row["sha256"]:
+                raise StationError("A previously saved copy is missing or changed. The incoming camera copy was kept for review.")
+            return dict(row)
+        return None
+
     def ingest(self, capture: CaptureEnvelope) -> dict:
         """Ingest an explicitly owned file; camera captures require a durable receipt."""
         if capture.source_kind not in ("manual", "demo", "canon"):
@@ -427,6 +497,15 @@ class StationService:
                 raise StationError("Canon camera capture currently accepts JPEG only.")
         else:
             receipt = inbox.for_source(source)
+        if receipt and receipt.get("sha256") and checksum(source) != receipt["sha256"]:
+            raise StationError("The camera transfer changed after download. Keep its file for review.")
+        fingerprint = self.camera_fingerprint(receipt) if receipt and receipt.get("sha256") else None
+        if fingerprint:
+            existing = self.camera_duplicate(receipt)
+            if existing:
+                receipt["session_key"] = existing["session_key"]
+                inbox.assigned(receipt, existing["asset_key"])
+                return existing
         if not source.is_file() or source.suffix.casefold() not in {".jpg", ".jpeg", ".png", ".tif", ".tiff"}:
             raise StationError("Choose a JPEG, PNG, or TIFF file. RAW import is not supported.")
         before = source.stat()
@@ -446,6 +525,12 @@ class StationService:
             session = store.connection.execute("SELECT * FROM sessions WHERE session_key=?", (capture.session_key,)).fetchone()
             if not session or session["state"] != "active":
                 raise StationError("The explicitly selected session is no longer active. This photo was not assigned elsewhere.")
+            if capture.source_kind == "canon" and session["camera_paused"]:
+                raise StationError("Reconnect the camera for the same student before accepting new photos.")
+            if fingerprint and store.connection.execute(
+                "SELECT 1 FROM assets WHERE camera_fingerprint=? AND status IN ('pending','staged')", (fingerprint,)
+            ).fetchone():
+                raise StationError("This camera photo is already being saved. Recover its pending copy before retrying.")
             person = json.loads(session["identity_json"])
             sequence = store.connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM assets WHERE session_key=?", (capture.session_key,)).fetchone()[0]
             counter_path = (self.root / "demo-counter.sqlite3" if settings["is_demo"] else
@@ -457,10 +542,10 @@ class StationService:
             filename = f"{identity}_{username}_{stamp}_{settings['station_code']}_{sequence:04d}_P{picture.number:06d}{source.suffix.casefold()}"
             relative = (Path(self._photo_directory(store, session)) / filename).as_posix()
             store.connection.execute(
-                """INSERT INTO assets(asset_key,session_key,sequence,relative_path,original_name,status,created_at,captured_at,time_source,source_kind,picture_number,numbering_machine_id)
-                   VALUES (?,?,?,?,?,'pending',?,?,?,?,?,?)""",
+                """INSERT INTO assets(asset_key,session_key,sequence,relative_path,original_name,status,created_at,captured_at,time_source,source_kind,picture_number,numbering_machine_id,camera_fingerprint)
+                   VALUES (?,?,?,?,?,'pending',?,?,?,?,?,?,?)""",
                 (key, capture.session_key, sequence, relative, receipt["original_name"] if receipt else source.name, utc_now(), instant.astimezone(timezone.utc).isoformat(),
-                 "provided" if capture.captured_at else "received", capture.source_kind, picture.number, picture.machine_id),
+                 "provided" if capture.captured_at else "received", capture.source_kind, picture.number, picture.machine_id, fingerprint),
             )
         destination = safe_path(self.root, relative)
         temporary = destination.with_name(destination.name + ".partial")
@@ -504,6 +589,13 @@ class StationService:
             rows = store.connection.execute("SELECT * FROM assets WHERE status IN ('pending','staged')").fetchall()
             for row in rows:
                 path = safe_path(self.root, row["relative_path"])
+                partial = path.with_name(path.name + ".partial")
+                if (row["status"] == "staged" and not path.exists() and partial.is_file() and row["sha256"]
+                        and partial.stat().st_size == row["byte_size"] and checksum(partial) == row["sha256"]):
+                    try:
+                        publish_file(partial, path)
+                    except OSError:
+                        pass  # Keep the verified partial for explicit recovery.
                 valid = path.is_file() and row["sha256"] and path.stat().st_size == row["byte_size"] and checksum(path) == row["sha256"]
                 store.connection.execute("UPDATE assets SET status=?,error_text=? WHERE asset_key=?",
                                          ("ready" if valid else "failed", "" if valid else "Interrupted import; source retained", row["asset_key"]))
@@ -511,11 +603,12 @@ class StationService:
                 recovered += bool(valid)
                 failed += not bool(valid)
             interrupted = store.connection.execute(
-                "UPDATE sessions SET state='needs-review',ended_at=? WHERE state IN ('active','draining')", (utc_now(),)
+                "UPDATE sessions SET state='needs-review',ended_at=?,interrupted=1,camera_paused=(capture_mode='canon') WHERE state IN ('active','draining')", (utc_now(),)
             ).rowcount
             if rows or interrupted:
                 store.audit("workspace-recovered", self.settings()["station_id"], {"recovered": recovered, "failed": failed, "sessions": interrupted})
         inbox = CameraInbox(self.root)
+        inbox.archive_assigned()
         with RosterStore(self.database, read_only=True) as store:
             assignments = {r["entity_key"]: json.loads(r["details_json"]) for r in store.connection.execute(
                 "SELECT * FROM audit_log WHERE action='camera-receipt-assigned' ORDER BY created_at"
@@ -523,10 +616,21 @@ class StationService:
             for receipt in inbox.receipts(pending_only=True):
                 if receipt["state"] == "corrupt":
                     continue
+                source = inbox.path(receipt)
+                if source.is_file() and receipt.get("sha256") and checksum(source) != receipt["sha256"]:
+                    inbox.quarantine(receipt, "The interrupted transfer's bytes changed. Keep this copy and check the SD card.")
+                    continue
                 assignment = assignments.get(receipt["receipt_key"])
-                asset = store.connection.execute("SELECT status FROM assets WHERE asset_key=?", (assignment["asset_key"],)).fetchone() if assignment else None
-                if asset and asset["status"] == "ready":
-                    inbox.assigned(receipt, assignment["asset_key"])
+                asset = store.connection.execute("SELECT * FROM assets WHERE asset_key=?", (assignment["asset_key"],)).fetchone() if assignment else None
+                if not asset and receipt.get("sha256"):
+                    try:
+                        asset = self.camera_duplicate(receipt)
+                    except StationError:
+                        asset = None
+                saved = safe_path(self.root, asset["relative_path"]) if asset else None
+                if asset and asset["status"] == "ready" and saved.is_file() and checksum(saved) == asset["sha256"]:
+                    receipt["session_key"] = asset["session_key"]
+                    inbox.assigned(receipt, asset["asset_key"])
                 else:
                     inbox.quarantine(receipt, "Interrupted camera transfer. Check its files and the SD-card copy before choosing a student manually.")
         return {"recovered_assets": recovered, "failed_assets": failed, "interrupted_sessions": interrupted}

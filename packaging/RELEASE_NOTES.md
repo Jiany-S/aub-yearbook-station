@@ -1,5 +1,25 @@
 Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
 
+New in 0.6.0:
+
+- USB interruptions pause the camera and keep the current student, visit, and
+  photo folder. Reconnect camera continues the same visit without finishing it.
+- After a crash, Resume unfinished student requires identity confirmation and
+  preserves the original visit, folder, saved photos, and picture numbers.
+- Replayed camera transfers are detected across reconnects and restarts. A replay
+  is discarded only when its previously saved original still verifies correctly.
+- Recovery publishes a fully verified staged photo left by a process exit, and
+  repairs the gap between saving a photo and recording receipt completion.
+- Open student folder and Recover photos support finding photographs and
+  explicitly adding SD-card copies to the selected student's visit.
+- Burst handling yields between batches, thumbnails are loaded once, and normal
+  capture updates avoid rebuilding the full roster and scanning completed receipts.
+
+Photos taken while USB is unplugged may remain only on the SD card. Check that
+card and review interrupted visits before treating their photo sets as complete.
+Unknown or late incoming files are retained for explicit assignment. Test the
+photography company's actual camera, USB cable, and laptop before event use.
+
 New in 0.5.2: readable photo folders, such as
 `originals/900000001_testcam1/2026-11-26_session-01/`. Separate visits on the same
 day get session-02, session-03, and so on. Opening an older event automatically

@@ -12,7 +12,7 @@ from uuid import uuid4
 from PIL import ExifTags, Image
 
 from .camera import CameraError, CaptureEnvelope
-from .camera_inbox import CameraInbox
+from .camera_inbox import CameraInbox, digest
 from .canon_sdk import CanonCallError, CanonSDK
 
 
@@ -58,18 +58,20 @@ class CanonConnector:
         self.clock_anchor = None
         self.clock_sample = None
         self.saving = False
-        self.seen_images = {}
 
     def connect(self):
-        if self.service.active_session():
-            raise CameraError("Finish the current session before connecting the camera.")
         if self.service.settings()["is_demo"]:
             raise CameraError("Use a separate camera test event; the sample-picture demo does not connect to hardware.")
+        active = self.service.active_session()
+        if active:
+            self.service.pause_camera_session(active["session_key"], "Preparing the camera for this student.", review=False)
         try:
             self.name = self.driver.connect()
             self.connected = True
             self._clock()
             self.poll()
+            if active:
+                self.start_session(active["session_key"])
         except BaseException:
             self.disconnect()
             raise
@@ -120,12 +122,15 @@ class CanonConnector:
         self.intervals.append(boundary)
         self.current = boundary
         self.driver.unlock()
+        self.service.camera_session_ready(session_key)
 
     def poll(self):
         if not self.connected:
             return
         self.driver.poll()
-        while self.driver.pending:
+        # Let Qt process reconnect/finish commands between bursts instead of
+        # monopolizing the camera thread for an arbitrarily large queue.
+        for _ in range(min(4, len(self.driver.pending))):
             self.saving = True
             try:
                 receipt = self.driver.download_next(self.inbox, self.connection_key)
@@ -136,13 +141,14 @@ class CanonConnector:
 
     def _route(self, receipt):
         try:
-            capture_time = jpeg_capture_time(self.inbox.path(receipt))
-            fingerprint = (receipt["original_name"], receipt["sha256"], capture_time)
-            if fingerprint in self.seen_images:
-                asset = self.seen_images[fingerprint]
+            if digest(self.inbox.path(receipt)) != receipt["sha256"]:
+                raise CameraError("The camera transfer changed after download. Its file was retained for review.")
+            asset = self.service.camera_duplicate(receipt)
+            if asset:
                 receipt["session_key"] = asset["session_key"]
                 self.inbox.assigned(receipt, asset["asset_key"])
                 return
+            capture_time = jpeg_capture_time(self.inbox.path(receipt))
             now = self._retry(self._clock, pump=False)
             if capture_time > now:
                 raise CameraError("The image time is ahead of the camera clock. Check the clock and choose its student manually.")
@@ -161,7 +167,6 @@ class CanonConnector:
             # the receipt, without guessing a camera timezone or DST offset.
             asset = self.service.ingest(CaptureEnvelope(boundary.key, self.inbox.path(receipt),
                                                        source_kind="canon", receipt_key=receipt["receipt_key"]))
-            self.seen_images[fingerprint] = asset
         except Exception as exc:
             self.inbox.quarantine(receipt, str(exc))
             if self.current and receipt.get("session_key") in (None, self.current.key):
@@ -188,12 +193,16 @@ class CanonConnector:
             self.sleep(0.05)
         self.current = None
 
-    def disconnect(self):
+    def disconnect(self, *, preserve_session=True):
         errors = []
         try:
             active = self.service.active_session()
             if active and (self.connected or self.current):
-                self.service.flag_session_review(active["session_key"], "The camera disconnected before this session finished. Check transferred photos and the SD card.")
+                reason = "The camera disconnected. Keep the same student and check the SD card for interrupted or offline photos."
+                if preserve_session:
+                    self.service.pause_camera_session(active["session_key"], reason)
+                else:
+                    self.service.flag_session_review(active["session_key"], reason)
             elif self.connected and self.intervals and (self.driver.pending or self.driver.jobs_pending):
                 self.service.flag_session_review(self.intervals[-1].key, "Camera transfers were still pending at disconnection. Check the SD-card copy before completing review.")
         except Exception as exc:

@@ -118,7 +118,12 @@ does not infer the camera timezone. RAW/JPEG grouping remains later work.
 SQLite uses WAL, foreign keys, and FULL synchronous commits. On startup, incomplete
 ingest jobs are reconciled against their journaled final paths and checksums.
 Active sessions become `needs-review`; capture assignment never automatically
-resumes. A failed import retains its source and any partial file for review.
+resumes. Schema v5 stores capture mode, paused-camera state, and whether an
+unfinished visit can be explicitly resumed. Confirmed resume reuses the original
+session UUID, immutable identity snapshot, photo directory, and sequence; starting
+a different visit leaves its photos untouched. A fully checksummed staged partial
+is published during recovery when its final path is absent. Unverified partials
+remain failed and available for review. A failed import retains its source and any partial file for review.
 Finishing a session with failed assets puts it in review. An operator can record
 the review outcome without erasing failed asset records.
 
@@ -178,11 +183,30 @@ intervals plus original JPEG EXIF times prevent notification arrival order from
 selecting the next student. Clock jumps stop the connection. Late closed-session
 transfers, unsupported formats, and missing capture times require human review.
 
+A USB/SDK interruption pauses the active Canon visit without ending it. Reconnect
+opens a fresh SDK connection, drains pre-arm events to review, establishes a fresh
+camera-clock interval, and explicitly rearms the same active session. Offline
+shots are not guessed into a session. Closing the app instead marks unfinished
+work for explicit, identity-confirmed recovery. Pauses and resume operations are
+audited, and interrupted visits require review of the SD-card copy.
+
 An inbox receipt is written before download. Bytes are flushed and checksummed
 before EdsDownloadComplete; failures call EdsDownloadCancel. Ingestion requires
 the receipt's explicit session binding and matching checksum. The verified
 intermediate file is removed only after asset commit, with an audit association
-that repairs a receipt interrupted after commit. Unassigned files remain local
+that repairs a receipt interrupted after commit. A durable, unique fingerprint of
+the original camera filename and verified bytes also closes the earlier gap
+between asset commit and receipt audit, and detects replay across reconnects.
+Legacy Canon assets use an indexed name/checksum lookup. An existing original
+must still verify before a replay's intermediate can be removed.
+
+Completed receipts are archived outside the frequently scanned review queue.
+Receipt reads and atomic replacement share a lock across Qt threads; temporary
+Windows sharing violations are retried with a bounded deadline. Archiving that
+is blocked by another program is deferred without failing the saved capture.
+Polling processes at most four downloads per batch. Capture refresh reads only
+the active visit, caches thumbnails, and avoids rebuilding roster/history tables.
+Unassigned files remain local
 and block event backups until explicitly recovered or marked handled. Event
 backups contain saved assets; handled external files are not silently included.
 

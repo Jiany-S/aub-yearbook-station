@@ -65,6 +65,13 @@ SDK files into the public source tree.
 
 ## Required hardware checks
 
+In 0.6.0, disconnect/reconnect must preserve the active student, session UUID,
+photo folder, previous files, and picture numbers. Use Reconnect camera rather
+than finishing that student's visit. Check SD-card photos taken while offline
+and record review afterward. After app termination, Resume unfinished student
+must require identity confirmation and continue the same folder; choosing a new
+visit must also leave the earlier photographs intact.
+
 - Repeat at least 50 consecutive student visits, including retakes and bursts.
 - Finish immediately after the last shutter press; verify delayed transfers keep
   the previous student's ownership or appear in transfer review.
@@ -75,6 +82,17 @@ SDK files into the public source tree.
 - Confirm camera-test photos do not advance the production picture counter.
 - Record the camera firmware, SDK version, Windows version, cable, and results.
 - Repeat the checks with the photography company's actual camera and laptop.
+
+## Software recovery rehearsal — 27 November 2026
+
+A synthetic run completed 1,000 student visits and 2,000 JPEG transfers, including
+20 disconnect/reconnect cycles and 20 duplicate replays. It verified continuous
+picture numbers, all stored photo hashes, event backup/restore, and isolation from
+the production counter. These are application tests, not a physical USB or
+power-cut certification. Automated tests also terminate real Python processes
+before/after photo publication and verify recovery, confirmed resume, and the next
+picture number. A UI test exposed a Windows metadata sharing race; synchronized
+receipt access and bounded sharing retries address it.
 
 ## Transfer review and current limits
 

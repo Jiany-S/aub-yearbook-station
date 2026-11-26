@@ -285,4 +285,4 @@ def test_version_one_database_migration_preserves_keys(tmp_path):
     with RosterStore(database) as store:
         assert store.find_student("test1")["student_key"] == "stable-key"
         assert not store.find_student("test1")["is_provisional"]
-        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == 5
