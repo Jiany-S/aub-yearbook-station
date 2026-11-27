@@ -36,7 +36,10 @@ def cell_text(value: object) -> str:
 
 
 def normalize_header(value: object) -> str:
-    return " ".join(cell_text(value).upper().split())
+    # AUB exports use both FIRST LATEST and First_Latest. Keep the accepted
+    # program alias explicit: other program columns describe different things.
+    name = " ".join(cell_text(value).upper().replace("_", " ").split())
+    return {"SHRDGMR PROGRAM 1": "SHRDGMR PROGRAM"}.get(name, name)
 
 
 @dataclass(frozen=True, order=True)

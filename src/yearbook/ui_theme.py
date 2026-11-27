@@ -77,5 +77,7 @@ QHeaderView::section { background: #f7f4f1; color: #534b4e; border: none; border
 QGroupBox { background: #ffffff; color: #292425; border: 1px solid #e7e1df; margin-top: 12px; padding: 14px; }
 QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }
 QScrollArea { border: none; background: #ffffff; }
+QProgressBar#operationProgress { background: #eee8e5; border: none; }
+QProgressBar#operationProgress::chunk { background: #650d1b; }
 QStatusBar { color: #70696b; background: #faf8f6; border-top: 1px solid #e7e1df; font-size: 9pt; }
 """

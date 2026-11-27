@@ -1,6 +1,6 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox
 import pytest
 
 from yearbook.gui import MainWindow, SetupDialog
@@ -192,6 +192,70 @@ def test_editing_search_clears_previous_confirmation(window, qtbot):
     assert window.found is None
     assert not window.confirm.isChecked()
     assert not window.start_button.isEnabled()
+
+
+def test_new_export_import_keeps_ui_responsive_and_refreshes_once(qtbot, tmp_path, monkeypatch):
+    from threading import Event
+    from openpyxl import Workbook
+    import yearbook.gui as gui
+
+    book = Workbook()
+    main = book.active
+    main.title = "Expected Applied Fall"
+    headers = ["Id", "First_Latest", "Last_Latest", "Email", "Shrdgmr_Program_1"]
+    main.append(headers)
+    main.append(["001234567", "Synthetic", "Student", "synthetic@mail.aub.edu", "PROGRAM-A"])
+    main.append(["001234567", "Synthetic", "Student", "synthetic@mail.aub.edu", "PROGRAM-B"])
+    diploma = book.create_sheet("Diploma")
+    diploma.append(headers)
+    diploma.append(["001234568", "Synthetic", "Other", "diplomatest@mail.aub.edu", "PROGRAM-C"])
+    source = tmp_path / "new-export.xlsx"
+    book.save(source)
+    widget = MainWindow(tmp_path / "new-export-event")
+    widget.service.configure("Synthetic import event", "ST01")
+    widget.refresh()
+    register_window(qtbot, widget)
+    widget.show()
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **kw: (str(source), ""))
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **kw: (main.title, True))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **kw: QMessageBox.StandardButton.Yes)
+    entered, release = Event(), Event()
+    real_load = gui.load_roster
+    def blocked_read(*args, **kwargs):
+        entered.set()
+        if not release.wait(10):
+            raise TimeoutError("The test did not release the workbook reader")
+        return real_load(*args, **kwargs)
+    monkeypatch.setattr(gui, "load_roster", blocked_read)
+    refreshes = []
+    real_refresh = widget.refresh
+    def measured_refresh():
+        refreshes.append(True)
+        return real_refresh()
+    monkeypatch.setattr(widget, "refresh", measured_refresh)
+    ticks = []
+    timer = QTimer(widget)
+    timer.setInterval(10)
+    timer.timeout.connect(lambda: ticks.append(True))
+    try:
+        qtbot.mouseClick(widget.welcome_import, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(entered.is_set, timeout=10000)
+        assert widget.busy and widget.operation_panel.isVisible()
+        assert "Validating" in widget.operation_label.text()
+        assert not widget.welcome_import.isEnabled()
+        assert not refreshes
+        timer.start()
+        qtbot.waitUntil(lambda: len(ticks) >= 3, timeout=2000)
+    finally:
+        release.set()
+        timer.stop()
+    qtbot.waitUntil(lambda: not widget.busy and widget.student_table.rowCount() == 1, timeout=10000)
+    assert len(refreshes) == 1
+    assert not widget.operation_panel.isVisible()
+    person = widget.service.lookup("001234567")
+    assert person == widget.service.lookup("synthetic")
+    assert {e["program"] for e in person["enrollments"]} == {"PROGRAM-A", "PROGRAM-B"}
+    assert widget.service.lookup("diplomatest") is None
 
 
 def test_context_actions_require_the_relevant_selection(window):

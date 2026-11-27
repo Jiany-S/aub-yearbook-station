@@ -21,7 +21,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
-    QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem,
+    QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem, QProgressBar,
     QLayout, QMainWindow, QMessageBox, QPushButton, QScrollArea, QStackedWidget, QTabWidget,
     QTableWidget, QTableWidgetItem, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
@@ -256,6 +256,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(masthead)
         self.banner = label("", "banner")
         layout.addWidget(self.banner)
+        self.operation_panel = QWidget()
+        operation_layout = QHBoxLayout(self.operation_panel)
+        operation_layout.setContentsMargins(0, 0, 0, 0)
+        self.operation_label = label("", "muted")
+        self.operation_progress = QProgressBar()
+        self.operation_progress.setObjectName("operationProgress")
+        self.operation_progress.setAccessibleName("Operation in progress")
+        self.operation_progress.setRange(0, 0)
+        self.operation_progress.setTextVisible(False)
+        self.operation_progress.setFixedSize(160, 8)
+        operation_layout.addWidget(self.operation_label, 1)
+        operation_layout.addWidget(self.operation_progress)
+        layout.addWidget(self.operation_panel)
+        self.operation_panel.hide()
         self.camera_demo_panel = QFrame()
         self.camera_demo_panel.setObjectName("demoPanel")
         demo_layout = QVBoxLayout(self.camera_demo_panel)
@@ -759,22 +773,32 @@ class MainWindow(QMainWindow):
             self.error(str(exc))
             return None
 
-    def run_task(self, title, function, success=None):
+    def run_task(self, title, function, success=None, *, refresh=True):
         if self.busy:
             return
         self.busy = True
+        self.operation_label.setText(title)
+        self.operation_panel.show()
         self._buttons()
         self.statusBar().showMessage(title)
         self.task = Task(function)
         def done(result):
             self.busy = False
-            self.refresh()
+            self.operation_panel.hide()
+            if refresh:
+                self.refresh()
+            else:
+                self._buttons()
             self.statusBar().showMessage("Completed. All changes are saved locally.")
             if success:
                 success(result)
         def failed(message):
             self.busy = False
-            self.refresh()
+            self.operation_panel.hide()
+            if refresh:
+                self.refresh()
+            else:
+                self._buttons()
             self.statusBar().showMessage("Operation stopped. Review the message and saved file statuses.")
             self.error(message)
         self.task.signals.done.connect(done)
@@ -901,10 +925,10 @@ class MainWindow(QMainWindow):
                 selected, accepted = QInputDialog.getItem(self, "Worksheet", "Select the roster worksheet", names, 0, False)
                 if not accepted:
                     return
-            self.run_task("Validating the roster…", lambda: load_roster(path, sheet=selected), preview)
+            self.run_task("Validating the roster…", lambda: load_roster(path, sheet=selected), preview, refresh=False)
         def preview(roster):
             info = roster.summary()
-            answer = QMessageBox.question(self, "Import roster?", f"{info['unique_students']} students from {info['source_rows']} rows.\n{info['exact_duplicate_rows']} exact duplicate rows; {info['students_with_multiple_programs']} students with multiple programs.\n\nReplace current roster eligibility? Previous sessions are preserved.")
+            answer = QMessageBox.question(self, "Import roster?", f"Worksheet: {roster.sheet_name}\n\n{info['unique_students']} students from {info['source_rows']} rows.\n{info['exact_duplicate_rows']} exact duplicate rows; {info['students_with_multiple_programs']} students with multiple programs.\n\nReplace current roster eligibility? Previous sessions are preserved.")
             if answer == QMessageBox.StandardButton.Yes:
                 def imported(_):
                     self.found = None
@@ -912,8 +936,8 @@ class MainWindow(QMainWindow):
                     self.refresh()
                     self.tabs.setCurrentIndex(0)
                     self.statusBar().showMessage("Student list imported. Find your first student.")
-                self.run_task("Importing the validated roster…", lambda: self.service.import_roster(roster), imported)
-        self.run_task("Reading workbook worksheets…", inspect, choose)
+                self.run_task("Importing the validated roster…", lambda: self.service.import_roster(roster), imported, refresh=False)
+        self.run_task("Reading workbook worksheets…", inspect, choose, refresh=False)
 
     def provisional(self):
         dialog = ProvisionalDialog(self)

@@ -90,6 +90,29 @@ def test_blank_rows_and_report_title_before_headers():
     assert parsed.blank_rows == 1
 
 
+def test_underscore_export_headers_preserve_identity_and_enrollment():
+    parsed = parse_rows([
+        ["Id", "First_Latest", "Middle_Latest", "Last_Latest", "Email",
+         "Shrdgmr_Program_1", "Shrdgmr_Levl_Code", "Shrdgmr_Coll_Code_1", "Admit_Term", "Dual"],
+        ["001234567", "Synthetic", "Middle", "Student", "exporttest@mail.aub.edu",
+         "PROGRAM-A", "UG", "FAC-A", "202620", "Y"],
+        ["001234567", "Synthetic", "Middle", "Student", "exporttest@mail.aub.edu",
+         "PROGRAM-B", "UG", "FAC-B", "202620", "Y"],
+    ])
+    student = parsed.students[0]
+    assert student.student_id == "001234567" and student.username == "exporttest"
+    assert (student.first_name, student.middle_name, student.last_name) == ("Synthetic", "Middle", "Student")
+    assert {e.program for e in student.enrollments} == {"PROGRAM-A", "PROGRAM-B"}
+    assert {e.faculty for e in student.enrollments} == {"FAC-A", "FAC-B"}
+    assert all((e.level, e.admit_term, e.dual) == ("UG", "202620", "Y") for e in student.enrollments)
+
+
+@pytest.mark.parametrize("duplicate", ["First_Latest", "SHRDGMR_PROGRAM_1"])
+def test_equivalent_headers_cannot_silently_replace_a_column(duplicate):
+    with pytest.raises(RosterValidationError, match="duplicate column"):
+        parse_rows([[*HEADERS, duplicate], [*row(), "Conflicting value"]])
+
+
 def test_missing_required_headers_and_empty_roster():
     with pytest.raises(RosterValidationError, match="headers not found"):
         parse_rows([["NAME", "EMAIL"]])

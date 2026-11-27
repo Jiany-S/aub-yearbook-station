@@ -1,5 +1,13 @@
 Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
 
+New in 0.8.1: Excel imports accept AUB's underscore-separated export headings,
+including First_Latest and Shrdgmr_Program_1, while continuing to support the
+older format. The chosen worksheet is named in the confirmation. Import stages
+show visible progress, keep reading and validation in the background, and rebuild
+the student table only once after saving. Duplicate canonical column names and
+conflicting student identities still stop the whole import for review. Existing
+sessions, photographs, and picture numbers are preserved.
+
 New in 0.8.0: the supplied **AUB Campus Yearbook logo** and burgundy branding are
 included offline. The photoshoot screen uses a plain white layout, a clearer
 student panel, larger photo previews, and **Finish and next student** beside the
