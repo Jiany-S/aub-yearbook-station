@@ -66,6 +66,7 @@ class StationService:
                 "event_id": str(uuid4()), "station_id": str(uuid4()), "event_name": "",
                 "station_code": "ST01", "timezone": "Asia/Beirut", "operator": "", "is_demo": False,
                 "is_camera_test": False,
+                "is_camera_demo": False,
             }
             for key, value in defaults.items():
                 store.connection.execute(
@@ -102,6 +103,8 @@ class StationService:
             raise StationError("Finish the active session first.")
 
     def import_roster(self, roster: Roster) -> dict:
+        if self.settings().get("is_camera_demo"):
+            raise StationError("Camera demo uses sample students. Open your event workspace to import a student list.")
         with RosterStore(self.database) as store, atomic(store.connection):
             self._require_idle(store)
             result = store.import_roster(roster)
@@ -138,6 +141,8 @@ class StationService:
             return person
 
     def create_provisional(self, full_name: str, student_id: str = "", username: str = "", notes: str = "") -> dict:
+        if self.settings().get("is_camera_demo"):
+            raise StationError("Camera demo uses sample students. Open your event workspace to add a real student.")
         full_name, student_id, username = full_name.strip(), student_id.strip(), username.strip().casefold()
         if not full_name or len(full_name) > 160:
             raise StationError("Enter the provisional student's name (up to 160 characters).")
@@ -707,6 +712,14 @@ class StationService:
         self.import_roster(parse_rows(rows, source_name="Built-in camera test students"))
         with RosterStore(self.database) as store, atomic(store.connection):
             store.connection.execute("UPDATE settings SET value='true' WHERE key='is_camera_test'")
+
+    def seed_camera_demo(self):
+        if self.settings().get("is_camera_demo"):
+            return
+        self.seed_camera_test()
+        self.configure("Canon camera demo · sample students", "DEMO-CAM")
+        with RosterStore(self.database) as store, atomic(store.connection):
+            store.connection.execute("UPDATE settings SET value='true' WHERE key='is_camera_demo'")
 
     def simulate(self, session_key: str, count: int = 3) -> list[dict]:
         if not self.settings()["is_demo"]:

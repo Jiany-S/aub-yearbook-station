@@ -44,6 +44,16 @@ drive. Wait for confirmation. The ZIP includes the student information and saved
 photos, so keep it in your team's private storage.</li>
 </ol>
 <h2>When something needs attention</h2>
+<p><b>First camera test / photography company demo?</b> Click <b>Camera demo</b>
+in the top bar. It provides five sample students with a separate picture counter;
+you do not need an Excel list. Click <b>Import SDK ZIP</b> and select Canon's
+Windows SDK ZIP. The app imports the x64 runtime without needing manual extraction.
+For the EOS R3, use the current SDK (13.21.10), choose <b>Photo Import/Remote
+Control</b> for USB connections, select JPEG-only, and turn HDR PQ off.
+Close EOS Utility, connect one camera, then click <b>Connect camera</b> and
+<b>Start test student</b>. Take photos, wait for Saved, and click <b>Finish test
+student</b>. Start again to test another sample student. <b>Open demo photos</b>
+opens the saved files. Finish and disconnect before <b>Leave camera demo</b>.</p>
 <p><b>Testing a Canon camera?</b> Open <b>Manage → Camera → Open separate camera
 test event</b>. This provides <b>testcam1</b> through <b>testcam5</b> and its own
 picture counter. In this event, choose <b>EDSDK.dll</b> from the official Windows

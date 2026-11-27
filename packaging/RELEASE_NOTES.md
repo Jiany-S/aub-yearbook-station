@@ -1,5 +1,18 @@
 Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
 
+New in 0.7.0: **Camera demo** is visible in the top bar, including first launch.
+It opens five sample students with a separate picture counter, guided connection
+steps, one-click test-student start/finish, and Open demo photos. Real roster
+imports and provisional students are disabled inside this demo. Leave camera
+demo returns to the previous event after finishing and disconnecting.
+
+**Import SDK ZIP** now selects only the package's x64 DLL directory and installs
+it into private local app storage. Manual SDK extraction is unnecessary. Canon's
+SDK is still supplied separately. For EOS R3 testing, use the official Windows
+EDSDK 13.21.10 ZIP, JPEG-only capture with HDR PQ off, and USB Photo Import/Remote
+Control mode. SDK initialization has been checked with the signed 13.21.10
+runtime; the physical R3 test remains pending.
+
 New in 0.6.0:
 
 - USB interruptions pause the camera and keep the current student, visit, and

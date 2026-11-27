@@ -5,6 +5,32 @@ It has automated simulated-camera and native-binding tests, plus the initial
 physical EOS 700D checks below. Full pre-event reliability validation remains
 pending; this initial check does not approve every Canon model or event setup.
 
+## Shoot-day target: Canon EOS R3
+
+The photography company's camera is an EOS R3. Canon added support in EDSDK
+13.14.30; the current 13.21.10 Windows x64 SDK lists the R3. Use a current official
+runtime and validate this model separately from the earlier 700D check.
+The locally supplied 13.21.10 DLL has a valid Canon Inc. signature and passed SDK
+initialization on 27 November 2026; no R3 was connected for that check.
+
+The 0.7.0 **Camera demo** button opens five synthetic students and a separate
+counter. **Import SDK ZIP** imports only x64 runtime DLLs into private application
+storage; the public installer/source never contains Canon's SDK. A photographer
+needs the app installer and their separately supplied official SDK ZIP.
+The demo's Connect camera / Start test student / Finish test student actions do
+not require roster import or typing a student ID. Open demo photos opens the
+saved files; no real roster can be imported into this demo event.
+
+For the first R3 test, use JPEG-only with HDR PQ disabled, set USB application to
+Photo Import/Remote Control, use a data cable and the camera's cable protector,
+and close EOS Utility. Confirm saved host files and camera-card copies, a second
+sample student, unplug/reconnect during a visit, and backup/restore.
+
+References: [Canon SDK release history](https://asia.canon/en/campaign/developerresources/camera/cap/edsdk-eos-digital-camera-sdk-release-note),
+[supported models](https://asia.canon/en/campaign/developerresources/sdk),
+[R3 USB app selection](https://cam.start.canon/en/C010/manual/html/UG-07_Set-up_0290.html),
+and [R3 manual](https://cam.start.canon/en/C010/manual/c010.pdf).
+
 ## Initial hardware result — 26 November 2026
 
 The EOS 700D was tested on Windows x64 build 26200 with EDSDK 3.6.30.6400 x64 and

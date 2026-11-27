@@ -2,6 +2,7 @@ from functools import partial
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QFileDialog
 
 from yearbook.camera_worker import CameraWorker
 from yearbook.canon import CanonConnector
@@ -239,3 +240,81 @@ def test_repeated_connect_request_keeps_the_healthy_connection(qtbot, tmp_path, 
     assert window.camera_connected and not drivers[0].locked
     assert window.active["session_key"] == key
     assert "already connected" in errors[0]
+
+
+def test_camera_demo_can_open_before_importing_any_student(qtbot,tmp_path):
+    window=MainWindow(tmp_path/"empty-event")
+    qtbot.addWidget(window)
+    window.show()
+    assert window.camera_demo_button.isEnabled()
+    qtbot.mouseClick(window.camera_demo_button,Qt.MouseButton.LeftButton)
+    demo=window.next_window
+    qtbot.addWidget(demo)
+    assert demo.isVisible() and demo.camera_demo_panel.isVisible()
+    assert demo.service.settings()["is_camera_demo"]
+    assert demo.service.settings()["is_camera_test"]
+    assert len(demo.service.students())==5 and not window.service.students()
+    assert demo.service.lookup("900000001")["username"]=="testcam1"
+    assert not demo.import_button.isEnabled() and not demo.provisional_button.isEnabled()
+    assert not demo.demo_capture_button.isEnabled()
+
+
+def test_demo_start_and_finish_cycle_sample_students(qtbot,tmp_path,synthetic_roster,monkeypatch):
+    window,drivers=camera_window(qtbot,tmp_path,synthetic_roster,monkeypatch)
+    # The helper creates a normal roster; switch to a separate, empty sample event.
+    window.open_camera_demo()
+    demo=window.next_window
+    def cleanup(w):
+        qtbot.waitUntil(lambda:not w.busy,timeout=10000)
+        if w.camera_connected:
+            w.camera_action("disconnect")
+            qtbot.waitUntil(lambda:not w.busy and not w.camera_connected,timeout=10000)
+        if w.service.active_session():
+            w.service.finish_session(w.service.active_session()["session_key"])
+    qtbot.addWidget(demo,before_close_func=cleanup)
+    demo.sdk_path.setText("synthetic")
+    demo.refresh()
+    connect(qtbot,demo)
+    qtbot.mouseClick(demo.demo_capture_button,Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda:not demo.busy and bool(demo.active),timeout=10000)
+    assert demo.active["person"]["username"]=="testcam1"
+    driver=drivers[-1]
+    driver.pending.append(("DEMO.JPG",jpeg(driver.clock())))
+    qtbot.waitUntil(lambda:demo.active["photo_count"]==1,timeout=10000)
+    qtbot.mouseClick(demo.demo_capture_button,Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda:not demo.busy and demo.active is None,timeout=10000)
+    qtbot.mouseClick(demo.demo_capture_button,Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda:not demo.busy and bool(demo.active),timeout=10000)
+    assert demo.active["person"]["username"]=="testcam2"
+    assert len(demo.service.sessions())==2
+    assert not demo.service.counter_path.exists()
+
+
+def test_sdk_zip_can_be_imported_from_the_interface(qtbot,tmp_path,monkeypatch):
+    from test_sdk_install import package
+    source=package(tmp_path)
+    window=MainWindow(tmp_path/"zip-import")
+    qtbot.addWidget(window)
+    window.show()
+    monkeypatch.setattr(QFileDialog,"getOpenFileName",lambda *a,**k:(str(source),""))
+    window.choose_canon_sdk()
+    qtbot.waitUntil(lambda:not window.busy,timeout=10000)
+    assert window.sdk_path.text().endswith("EDSDK.dll")
+    assert "CanonSDK" in window.sdk_path.text()
+    assert __import__('pathlib').Path(window.sdk_path.text()).read_bytes()
+
+
+def test_leaving_camera_demo_returns_to_the_previous_event(qtbot,tmp_path):
+    window=MainWindow(tmp_path/"original-event")
+    window.service.configure("Synthetic original event","ST01")
+    qtbot.addWidget(window)
+    window.show()
+    window.open_camera_demo()
+    demo=window.next_window
+    qtbot.addWidget(demo)
+    demo.open_camera_demo()
+    restored=demo.next_window
+    qtbot.addWidget(restored)
+    assert restored.isVisible() and restored.root==window.root
+    assert restored.service.settings()["event_name"]=="Synthetic original event"
+    assert not restored.service.settings()["is_camera_demo"]

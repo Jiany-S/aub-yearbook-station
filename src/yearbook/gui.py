@@ -185,6 +185,7 @@ class MainWindow(QMainWindow):
         self.busy = False
         self.task = None
         self.next_window = None
+        self.return_workspace = None
         self.camera_connected = False
         self.camera_name = "Canon"
         self.camera_message = "Camera disconnected. Manual photo import is available."
@@ -225,11 +226,28 @@ class MainWindow(QMainWindow):
         self.event_summary = label("", "muted")
         brand.addWidget(self.event_summary)
         top.addLayout(brand, 1)
+        self.camera_demo_button = button("Camera demo", self.open_camera_demo, "cameraDemo")
+        top.addWidget(self.camera_demo_button)
         self.manage_button = button("Manage", self.show_management, "manageEvent")
         top.addWidget(self.manage_button)
         layout.addLayout(top)
         self.banner = label("Manual mode: add photos from this laptop.", "banner")
         layout.addWidget(self.banner)
+        self.camera_demo_panel = QFrame()
+        demo_layout = QVBoxLayout(self.camera_demo_panel)
+        demo_layout.setContentsMargins(0, 0, 0, 0)
+        self.camera_demo_note = label("1. Import the Canon SDK ZIP. 2. Connect the camera by USB and choose JPEG. 3. Connect camera, then start a test student.", "nextStep")
+        demo_layout.addWidget(self.camera_demo_note)
+        demo_actions = QHBoxLayout()
+        self.demo_sdk_button = button("Import SDK ZIP", self.choose_canon_sdk)
+        self.demo_connect_button = button("Connect camera", self.demo_camera_connection, primary=True)
+        self.demo_capture_button = button("Start test student", self.demo_capture, "demoCapture", True)
+        self.demo_folder_button = button("Open demo photos", self.open_demo_photos)
+        for widget in (self.demo_sdk_button, self.demo_connect_button, self.demo_capture_button, self.demo_folder_button):
+            demo_actions.addWidget(widget)
+        demo_actions.addStretch()
+        demo_layout.addLayout(demo_actions)
+        layout.addWidget(self.camera_demo_panel)
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.addTab(self._capture_tab(), "Photoshoot")
@@ -373,7 +391,7 @@ class MainWindow(QMainWindow):
         self.sdk_path.setPlaceholderText("Choose EDSDK_64/Dll/EDSDK.dll")
         layout.addWidget(self.sdk_path)
         sdk_actions = QHBoxLayout()
-        self.sdk_button = button("Choose Canon SDK", self.choose_canon_sdk)
+        self.sdk_button = button("Import SDK ZIP / choose DLL", self.choose_canon_sdk)
         self.camera_connect_button = button("Connect camera", self.connect_camera, primary=True)
         self.camera_disconnect_button = button("Disconnect camera", self.disconnect_camera)
         for widget in (self.sdk_button, self.camera_connect_button, self.camera_disconnect_button):
@@ -413,7 +431,10 @@ class MainWindow(QMainWindow):
         self.heading.setText("Yearbook Station")
         student_label = "student" if count == 1 else "students"
         self.event_summary.setText(f"{config['event_name'] or 'New event'} · {config['station_code']} · {count} {student_label}")
-        if config["is_demo"]:
+        if config.get("is_camera_demo"):
+            banner = (f"CAMERA DEMO · {self.camera_name} connected. Use the test buttons below."
+                      if self.camera_connected else "CAMERA DEMO · Sample students, separate photos and picture counter. Use the test buttons below.")
+        elif config["is_demo"]:
             banner = "DEMO · Sample students only. Add sample photos to practice."
         elif self.camera_connected:
             banner = f"{self.camera_name} connected · JPEG photos transfer automatically during the active session."
@@ -421,10 +442,11 @@ class MainWindow(QMainWindow):
             banner = "Camera paused · The same student and folder are still selected. Reconnect to continue."
         else:
             banner = "Manual mode: add photos from this laptop. Connect a Canon camera under Manage → Camera."
-        if config.get("is_camera_test"):
+        if config.get("is_camera_test") and not config.get("is_camera_demo"):
             banner = "CAMERA TEST · Separate practice event and picture counter. " + banner
         self.banner.setText(banner)
         configured = bool(config["event_name"])
+        self.camera_demo_panel.setVisible(bool(config.get("is_camera_demo")))
         operational = configured and (count > 0 or bool(self.active))
         self.capture_stack.setCurrentIndex(1 if operational else 0)
         self.welcome_title.setText("Set up this laptop for the photoshoot")
@@ -443,6 +465,8 @@ class MainWindow(QMainWindow):
             self.displayed_session = None
             self.photo_signatures.clear()
             self.photo_empty.setText("Photos will appear here.\nFind a student, confirm their details, then start the session.")
+            if config.get("is_camera_demo"):
+                self.photo_empty.setText("Connect camera, then Start test student.\nYour test photos will appear here.")
             self.photo_stack.setCurrentIndex(0)
             self.photo_hint.setText("New filenames include the laptop's general picture number.")
         self._found_card()
@@ -514,7 +538,9 @@ class MainWindow(QMainWindow):
         self.camera_status.setText(self.camera_message)
         note = (f"{self.camera_name} connected · Photos save under the current student."
                 if self.camera_connected else "Camera paused · The same student and folder are still selected. Reconnect to continue.")
-        if self._config.get("is_camera_test"):
+        if self._config.get("is_camera_demo"):
+            note = "CAMERA DEMO · " + note
+        elif self._config.get("is_camera_test"):
             note = "CAMERA TEST · " + note
         transfers = self.service.camera_transfers()
         if transfers:
@@ -539,6 +565,9 @@ class MainWindow(QMainWindow):
     def _found_card(self):
         person = self.active["person"] if self.active else self.found
         if not person:
+            if self._config.get("is_camera_demo"):
+                self.student_card.setText("<h3>Sample test student</h3><p>Click Start test student above. Sample details fill in automatically; no real student ID is needed.</p>")
+                return
             self.student_card.setText("<h3>Check the student's details</h3><p>Their name and program will appear here after you click Find.</p>")
             return
         programs = "<br>".join(html.escape(" · ".join(e.get(k, "") for k in ("program", "faculty", "level") if e.get(k))) for e in person["enrollments"])
@@ -584,6 +613,33 @@ class MainWindow(QMainWindow):
         self.welcome_missing.setEnabled(ready and idle and bool(config["event_name"]))
         self.provisional_button.setEnabled(ready and idle)
         self.manage_button.setEnabled(ready)
+        in_camera_demo = bool(config.get("is_camera_demo"))
+        self.camera_demo_button.setText("Leave camera demo" if in_camera_demo else "Camera demo")
+        self.camera_demo_button.setEnabled(ready and idle and not self.camera_connected)
+        self.demo_sdk_button.setEnabled(ready and idle and not self.camera_connected)
+        self.demo_connect_button.setEnabled(ready and (self.camera_connected or bool(self.sdk_path.text())))
+        self.demo_connect_button.setText("Disconnect camera" if self.camera_connected else "Reconnect camera" if camera_paused else "Connect camera")
+        self.demo_capture_button.setEnabled(ready and (bool(self.active) or self.camera_connected))
+        self.demo_capture_button.setText("Finish test student" if self.active else "Start test student")
+        self.demo_folder_button.setEnabled(ready)
+        if in_camera_demo:
+            self.capture_heading.setText("1. Sample test student")
+            for widget in (self.search, self.search_button, self.search_feedback, self.confirm,
+                           self.start_button, self.finish_button, self.provisional_button):
+                widget.hide()
+            for widget in (self.import_button, self.setup_button, self.provisional_button):
+                widget.setEnabled(False)
+            self.camera_demo_note.setText(
+                f"{full_name(self.active['person'])} · {self.active['photo_count']} saved. Take JPEG photos, then Finish test student."
+                if self.active and self.camera_connected else
+                "Camera paused. Reconnect to continue the same test student and folder."
+                if self.active else
+                "Camera connected. Click Start test student; sample details are filled automatically."
+                if self.camera_connected else
+                "SDK ready. Connect the R3 by USB: Photo Import/Remote Control, JPEG, HDR PQ off. Then Connect camera."
+                if self.sdk_path.text() else
+                "1. Import the SDK ZIP. 2. Connect the R3 by USB: Photo Import/Remote Control, JPEG, HDR PQ off. 3. Connect camera."
+            )
         for widget in (self.welcome_demo, self.help_demo):
             widget.setText("Demo is open" if config["is_demo"] else "Try demo")
             widget.setEnabled(ready and idle and not config["is_demo"] and not self.camera_connected)
@@ -618,6 +674,8 @@ class MainWindow(QMainWindow):
             hint = "Check the details with the student, then tick the confirmation above."
         else:
             hint = "Identity checked. You can start the session."
+        if in_camera_demo and not self.active:
+            hint = "Use Connect camera, then Start test student above. Each new test selects another sample student."
         self.next_step.setText(hint)
 
 
@@ -731,6 +789,10 @@ class MainWindow(QMainWindow):
         self.search.setText(identifier or "Temporary student")
         self.confirm.setChecked(False)
         self.search_feedback.setText("Check this student's identity, then resume their saved visit and folder.")
+        if self._config.get("is_camera_demo"):
+            self.confirm.setChecked(True)
+            self.start()
+            return
         self.refresh()
 
     def open_student_folder(self):
@@ -993,15 +1055,73 @@ class MainWindow(QMainWindow):
         self.next_window.show()
         self.close()
 
+    def open_camera_demo(self):
+        if self.camera_connected or self.active or self.busy:
+            return
+        if self._config.get("is_camera_demo"):
+            target = self.return_workspace or QSettings().value("camera_demo_return_workspace", str(app_data() / "workspace"))
+            if Path(target).resolve() == self.root:
+                target = app_data() / "workspace"
+            self.switch_workspace(target)
+            return
+        try:
+            self.next_window = MainWindow(app_data() / "camera-demo")
+            self.next_window.service.seed_camera_demo()
+            self.next_window.refresh()
+        except Exception as exc:
+            if self.next_window:
+                self.next_window.workspace_lock.unlock()
+                self.next_window.deleteLater()
+                self.next_window = None
+            self.error(str(exc))
+            return
+        QSettings().setValue("camera_demo_return_workspace", str(self.root))
+        self.next_window.return_workspace = self.root
+        QSettings().setValue("workspace", str(self.next_window.root))
+        self.management_dialog.reject()
+        screen = self.screen().availableGeometry()
+        self.next_window.resize(min(1040, screen.width() - 40), min(760, screen.height() - 70))
+        self.next_window.show()
+        self.close()
+
+    def demo_capture(self):
+        if not self._config.get("is_camera_demo") or self.busy:
+            return
+        if self.active:
+            self.finish()
+        elif self.camera_connected:
+            username = f"testcam{len(self.service.sessions()) % 5 + 1}"
+            self.search.setText(username)
+            self.lookup()
+            self.confirm.setChecked(True)  # Explicit demo action selects a synthetic student.
+            self.start()
+
+    def demo_camera_connection(self):
+        if self.camera_connected:
+            self.disconnect_camera()
+        else:
+            self.connect_camera()
+
+    def open_demo_photos(self):
+        path = self.root / "originals"
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
     def choose_canon_sdk(self):
         from .canon_sdk import sdk_file
-        path, _ = QFileDialog.getOpenFileName(self, "Choose the official Windows x64 EDSDK.dll", "", "Canon SDK (EDSDK.dll)")
+        path, _ = QFileDialog.getOpenFileName(self, "Import Canon Windows SDK ZIP or choose EDSDK.dll", "", "Canon SDK (*.zip EDSDK.dll)")
         if path:
-            selected = self.guarded(lambda: sdk_file(path))
-            if selected:
-                self.sdk_path.setText(str(selected))
-                QSettings().setValue("canon_sdk_path", str(selected))
-                self._buttons()
+            if Path(path).suffix.casefold() == ".zip":
+                from .sdk_install import install_sdk_zip
+                self.run_task("Importing Canon's Windows x64 runtime…", lambda: install_sdk_zip(path, app_data() / "CanonSDK"), self.set_canon_sdk)
+            else:
+                selected = self.guarded(lambda: sdk_file(path))
+                if selected:
+                    self.set_canon_sdk(selected)
+
+    def set_canon_sdk(self, selected):
+        self.sdk_path.setText(str(selected))
+        QSettings().setValue("canon_sdk_path", str(selected))
+        self._buttons()
 
     def connect_camera(self):
         if not self._config["event_name"] or not any(p["eligible"] for p in self._students):
@@ -1123,7 +1243,8 @@ class MainWindow(QMainWindow):
         layout.setSpacing(16)
         left = QVBoxLayout()
         left.setSpacing(7)
-        left.addWidget(label("1. Find and confirm the student", "eyebrow"))
+        self.capture_heading = label("1. Find and confirm the student", "eyebrow")
+        left.addWidget(self.capture_heading)
         self.search = QLineEdit()
         self.search.setObjectName("studentSearch")
         self.search.setAccessibleName("AUB ID or username")
@@ -1283,9 +1404,30 @@ def self_test(report: Path, screenshot: Path | None = None) -> int:
         window.finish()
         output = window.service.export_backup(Path(folder) / "backup.zip")
         assert output.is_file()
+        camera_demo = MainWindow(Path(folder) / "camera-demo")
+        cleanup.callback(camera_demo.workspace_lock.unlock)
+        camera_demo.service.seed_camera_demo()
+        camera_demo.refresh()
+        assert len(camera_demo.service.students()) == 5
+        assert camera_demo._config["is_camera_demo"] and camera_demo._config["is_camera_test"]
+        # Exercise the importer inside the frozen application without shipping or
+        # loading any vendor binary. The synthetic PE is only an architecture fixture.
+        import struct
+        from zipfile import ZipFile
+        from .sdk_install import install_sdk_zip
+        fixture = bytearray(256)
+        fixture[:2], fixture[128:132] = b"MZ", b"PE\0\0"
+        struct.pack_into("<I", fixture, 0x3C, 128)
+        struct.pack_into("<H", fixture, 132, 0x8664)
+        package = Path(folder) / "synthetic-sdk.zip"
+        with ZipFile(package, "w") as archive:
+            archive.writestr("synthetic/EDSDK_64/Dll/EDSDK.dll", fixture)
+        assert install_sdk_zip(package, Path(folder) / "sdk-import").is_file()
+        camera_demo.close()
         result = {"passed": True, "version": __version__, "synthetic_students": 5, "saved_photos": 2,
                   "picture_numbers": [asset["picture_number"] for asset in numbered],
-                  "backup_verified": True, "canon_connector_implemented": True, "camera_hardware_tested": False}
+                  "backup_verified": True, "canon_connector_implemented": True, "camera_hardware_tested": False,
+                  "camera_demo_implemented": True, "sdk_zip_import_verified": True}
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(json.dumps(result, indent=2), encoding="utf-8")
         window.close()

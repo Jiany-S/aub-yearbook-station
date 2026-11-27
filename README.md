@@ -58,6 +58,24 @@ separate and unchanged.
 
 ## Test a Canon camera
 
+For a first test, click **Camera demo** in the top bar; no roster or event setup
+is needed. It opens a separate event with five sample students and its own
+picture counter. Click **Import SDK ZIP** and choose the official Windows SDK
+ZIP (EDSDK 13.21.10 supports the EOS R3). The app selects and installs its x64
+runtime locally. The SDK is supplied separately and is not included in the app.
+Connect one camera by USB, close EOS Utility, choose JPEG-only image quality,
+and click **Connect camera → Start test student**. Sample details fill in
+automatically. Take photographs, wait for Saved, then **Finish test student**.
+Starting again selects the next sample student. **Open demo photos** shows all
+test files. Finish and disconnect before **Leave camera demo** to return to your
+previous event. A test demo cannot import a real roster or create real students.
+
+On an EOS R3, set **Choose USB connection app → Photo Import/Remote Control**
+and disable HDR PQ for this JPEG test. Check capture, student switching, USB
+reconnection, and SD-card copies with the actual camera before the shoot.
+See Canon's [R3 USB setup](https://cam.start.canon/en/C010/manual/html/UG-07_Set-up_0290.html)
+and [SDK model list](https://asia.canon/en/campaign/developerresources/sdk).
+
 Use **Manage → Camera → Open separate camera test event** for an isolated event
 with usernames `testcam1` through `testcam5` and its own picture counter.
 Choose `EDSDK.dll` from Canon's official **Windows x64 EDSDK** package, keep its
