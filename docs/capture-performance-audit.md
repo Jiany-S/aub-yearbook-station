@@ -53,6 +53,13 @@ changed bytes despite unchanged file size/time, unsupported linking, duplicates,
 late transfers, clock changes, USB pause/reconnect, current-roster eligibility,
 and actual process exits before/after publishing both copied and linked photos.
 
+A separate simulated shoot completed 1,000 student visits and saved 2,000 photos,
+with 20 disconnect/reconnect cycles and 20 duplicate transfer replays. Every
+photo checksum and sequential picture number verified, no transfers remained
+unresolved, and the complete backup restored successfully. The production
+picture counter was untouched. This checks workflow and recovery at event
+scale; the simulated camera and small JPEGs do not measure USB throughput.
+
 A paired local benchmark alternated the previous implementation with the new
 one, using twelve high-entropy JPEGs per implementation at each size:
 
