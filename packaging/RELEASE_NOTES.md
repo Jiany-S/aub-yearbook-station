@@ -1,5 +1,24 @@
 Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
 
+New in 0.9.0:
+
+- Fixes the Connect camera freeze caused by rebuilding visible student-table
+  cells. Student, history, and transfer tables now use record models, skip
+  unchanged data, and bound column-width measurement. Camera events no longer
+  rebuild an unchanged roster.
+- On filesystems that support hard links, Canon's already-durable private inbox
+  photo supplies staging without a second full payload write and flush. Its
+  original inbox name remains until the final asset and receipt are committed.
+  Other filesystems fall back to the verified copy. User-selected files are
+  always copied independently.
+- Final staged bytes must match the download receipt as well as source stability
+  checks. New tests cover corruption, unsupported linking, and actual process
+  exits around publication. Camera-not-found errors explain USB power cycling.
+
+Six physical EOS 700D JPEG captures with EDSDK 13.21.10 passed two-student
+switching, a short burst, finishing, and disconnection. The EOS R3 still needs
+testing with the photography company's camera, USB cable, and laptop.
+
 New in 0.8.2: **Students** defaults to the current roster. **Show previous lists**
 opens older records for viewing without enabling them for new photography.
 Photoshoot search excludes previous lists, and unfinished-visit prompts show

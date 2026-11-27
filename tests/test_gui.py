@@ -177,7 +177,7 @@ def test_import_moves_from_setup_to_photoshoot(qtbot, tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **kw: QMessageBox.StandardButton.Yes)
     qtbot.mouseClick(widget.welcome_import, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: not widget.busy and widget.capture_stack.currentIndex() == 1, timeout=30000)
-    assert widget.student_table.rowCount() == 1
+    assert widget.student_table.model().rowCount() == 1
     assert widget.tabs.currentIndex() == 0
     assert widget.search.isEnabled()
 
@@ -249,7 +249,7 @@ def test_new_export_import_keeps_ui_responsive_and_refreshes_once(qtbot, tmp_pat
     finally:
         release.set()
         timer.stop()
-    qtbot.waitUntil(lambda: not widget.busy and widget.student_table.rowCount() == 1, timeout=10000)
+    qtbot.waitUntil(lambda: not widget.busy and widget.student_table.model().rowCount() == 1, timeout=10000)
     assert len(refreshes) == 1
     assert not widget.operation_panel.isVisible()
     person = widget.service.lookup("001234567")
@@ -266,8 +266,8 @@ def test_context_actions_require_the_relevant_selection(window):
     assert not window.reconcile_button.isEnabled()
     person = window.service.create_provisional("Synthetic visitor")
     window.refresh()
-    for row in range(window.student_table.rowCount()):
-        if window.student_table.item(row, 0).data(Qt.ItemDataRole.UserRole)["student_key"] == person["student_key"]:
+    for row in range(window.student_table.model().rowCount()):
+        if window.student_table.model().index(row, 0).data(Qt.ItemDataRole.UserRole)["student_key"] == person["student_key"]:
             window.student_table.selectRow(row)
             break
     assert window.reconcile_button.isEnabled()
@@ -291,11 +291,11 @@ def test_previous_roster_is_hidden_and_cannot_be_used_for_a_new_shoot(window, ph
     ]))
     window.refresh()
     assert not window.show_previous_students.isChecked()
-    assert window.student_table.rowCount() == 1
-    assert window.student_table.item(0, 1).text() == "test2"
+    assert window.student_table.model().rowCount() == 1
+    assert window.student_table.model().index(0, 1).data() == "test2"
     assert window.selected(window.student_table) is None
     assert not window.use_button.isEnabled()
-    assert window.session_table.rowCount() == 1
+    assert window.session_table.model().rowCount() == 1
     assert not window.resume_button.isVisible()
     assert "Current list: 1" in window.roster_note.text()
     window.search.setText("test1")
@@ -303,7 +303,7 @@ def test_previous_roster_is_hidden_and_cannot_be_used_for_a_new_shoot(window, ph
     assert window.found is None and not window.start_button.isEnabled()
     assert "current list" in window.search_feedback.text()
     window.show_previous_students.setChecked(True)
-    assert window.student_table.rowCount() == 2
+    assert window.student_table.model().rowCount() == 2
     window.student_table.selectRow(0)
     assert not window.use_button.isEnabled()
     window.use_selected()
@@ -312,7 +312,7 @@ def test_previous_roster_is_hidden_and_cannot_be_used_for_a_new_shoot(window, ph
     with pytest.raises(StationError, match="not in the current roster"):
         window.service.resume_session(visit, identity_confirmed=True)
     window.show_previous_students.setChecked(False)
-    assert window.student_table.rowCount() == 1
+    assert window.student_table.model().rowCount() == 1
     assert window.selected(window.student_table) is None
     assert window.service.assets(visit)[0] == asset
     assert (window.root / asset["relative_path"]).read_bytes() == photo.read_bytes()

@@ -155,7 +155,9 @@ class CanonSDK:
             try:
                 self._call("EdsGetCameraList", C.byref(cameras))
                 self._call("EdsGetChildCount", cameras, C.byref(count))
-                if count.value != 1:
+                if count.value == 0:
+                    raise CameraError("The Canon SDK cannot see an available camera. Turn it on and close EOS Utility. After an interrupted connection, turn the camera off and on, reconnect USB, then retry.")
+                if count.value > 1:
                     raise CameraError("Connect exactly one Canon camera by USB and turn it on. Close EOS Utility if it opens.")
                 self._call("EdsGetChildAtIndex", cameras, 0, C.byref(self.camera))
             finally:

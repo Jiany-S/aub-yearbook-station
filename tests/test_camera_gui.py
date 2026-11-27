@@ -229,6 +229,24 @@ def test_camera_bursts_do_not_reload_saved_thumbnails(qtbot, tmp_path, synthetic
     assert len(reads) == 7
 
 
+def test_camera_connect_and_disconnect_do_not_reset_a_visible_large_roster(qtbot, tmp_path, synthetic_roster, monkeypatch):
+    from yearbook.roster import parse_rows
+    window, drivers = camera_window(qtbot, tmp_path, synthetic_roster, monkeypatch)
+    window.service.import_roster(parse_rows([
+        ["ID", "FIRST LATEST", "LAST LATEST", "EMAIL"],
+        *[[str(900100000+i), "Synthetic", f"Student {i}", f"load{i}@mail.aub.edu"] for i in range(1000)],
+    ]))
+    window.refresh()
+    window.tabs.setCurrentIndex(1)
+    resets = []
+    window.student_table.model().modelReset.connect(lambda: resets.append(True))
+    connect(qtbot, window)
+    assert window.student_table.model().rowCount() == 1000 and not resets
+    window.camera_action("disconnect")
+    qtbot.waitUntil(lambda: not window.busy and not window.camera_connected, timeout=10000)
+    assert not resets
+
+
 def test_repeated_connect_request_keeps_the_healthy_connection(qtbot, tmp_path, synthetic_roster, monkeypatch):
     window, drivers = camera_window(qtbot, tmp_path, synthetic_roster, monkeypatch)
     errors = []

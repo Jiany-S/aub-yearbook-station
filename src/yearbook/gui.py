@@ -19,11 +19,11 @@ from PySide6.QtCore import QLockFile, QObject, QRunnable, QSettings, QSize, Qt, 
 from PySide6.QtGui import QDesktopServices, QIcon, QImageReader, QPixmap
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QCheckBox, QDialog, QDialogButtonBox,
-    QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
+    QApplication, QCheckBox, QDialog, QDialogButtonBox,
+    QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem, QProgressBar,
     QLayout, QMainWindow, QMessageBox, QPushButton, QScrollArea, QStackedWidget, QTabWidget,
-    QTableWidget, QTableWidgetItem, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
+    QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from . import __version__
@@ -35,6 +35,7 @@ from .service import StationError, StationService, safe_path
 from .help_content import HOW_TO_HTML
 from .ui_theme import STYLE, apply_theme
 from .branding import app_icon, wordmark
+from .record_table import RecordTable
 
 
 def app_data() -> Path:
@@ -319,16 +320,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def table(headers):
-        widget = QTableWidget(0, len(headers))
-        widget.setHorizontalHeaderLabels(headers)
-        widget.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        widget.verticalHeader().hide()
-        widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        widget.horizontalHeader().setStretchLastSection(True)
-        widget.setAlternatingRowColors(True)
-        return widget
+        return RecordTable(headers)
 
     def _roster_tab(self):
         tab = QWidget()
@@ -351,7 +343,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.student_empty)
         self.student_table = self.table(["AUB ID", "Username", "Name", "Program", "Status"])
         self.student_table.setObjectName("studentTable")
-        self.student_table.itemSelectionChanged.connect(self._buttons)
+        self.student_table.selection_changed.connect(self._buttons)
         layout.addWidget(self.student_table, 1)
         layout.addWidget(label("Select a row to choose a student. Temporary records can be matched to the official list later.", "muted"))
         return self._scroll_page(tab)
@@ -364,8 +356,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.history_empty)
         self.session_table = self.table(["Started", "Name", "AUB ID", "Status", "Photos"])
         self.session_table.setObjectName("sessionTable")
-        self.session_table.itemSelectionChanged.connect(self.history_selected)
-        self.session_table.itemSelectionChanged.connect(self._buttons)
+        self.session_table.selection_changed.connect(self.history_selected)
+        self.session_table.selection_changed.connect(self._buttons)
         layout.addWidget(self.session_table, 2)
         actions = QHBoxLayout()
         self.review_button = button("Mark reviewed", self.resolve_review)
@@ -449,7 +441,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.transfer_note)
         self.transfer_table = self.table(["File", "Why it needs review"])
         self.transfer_table.setMinimumHeight(100)
-        self.transfer_table.itemSelectionChanged.connect(self._buttons)
+        self.transfer_table.selection_changed.connect(self._buttons)
         layout.addWidget(self.transfer_table, 1)
         review_actions = QHBoxLayout()
         self.transfer_folder_button = button("Open transfer review folder", self.open_transfer_folder)
@@ -516,16 +508,12 @@ class MainWindow(QMainWindow):
             self.photo_hint.setText("Original files and picture numbers are saved locally.")
         self._found_card()
         self.refresh_student_table()
-        old_session = self.selected(self.session_table)
-        self.session_table.blockSignals(True)
-        self.session_table.setRowCount(len(sessions))
+        session_rows = []
         names = {"active": "In progress", "draining": "Saving", "completed": "Finished", "needs-review": "Needs review"}
-        for row, session in enumerate(sessions):
+        for session in sessions:
             started = datetime.fromisoformat(session["started_at"]).astimezone(ZoneInfo(config["timezone"])).strftime("%Y-%m-%d %H:%M")
-            self._row(self.session_table, row, [started, full_name(session["person"]), session["person"]["student_id"] or "Temporary", names[session["state"]], str(session["photo_count"])], session)
-            if old_session and old_session["session_key"] == session["session_key"]:
-                self.session_table.setCurrentCell(row, 0)
-        self.session_table.blockSignals(False)
+            session_rows.append(([started, full_name(session["person"]), session["person"]["student_id"] or "Temporary", names[session["state"]], str(session["photo_count"])], session))
+        self.session_table.replace_records(session_rows, "session_key")
         self.session_table.setVisible(bool(sessions))
         self.history_empty.setVisible(not sessions)
         self.history_selected()
@@ -538,14 +526,8 @@ class MainWindow(QMainWindow):
             self.banner.setText(self.banner.text() + f" · {len(transfers)} transfer(s) need review under Manage → Camera.")
         if not self.camera_connected and not (configured and count):
             self.camera_status.setText(self.camera_message + " Set up an event and import students, or open the separate camera test event below.")
-        previous_transfer = self.selected(self.transfer_table)
-        self.transfer_table.blockSignals(True)
-        self.transfer_table.setRowCount(len(transfers))
-        for row, receipt in enumerate(transfers):
-            self._row(self.transfer_table, row, [receipt["original_name"], receipt["reason"] or "Transfer not yet assigned"], receipt)
-            if previous_transfer and receipt["receipt_key"] == previous_transfer["receipt_key"]:
-                self.transfer_table.setCurrentCell(row, 0)
-        self.transfer_table.blockSignals(False)
+        self.transfer_table.replace_records([([receipt["original_name"], receipt["reason"] or "Transfer not yet assigned"], receipt)
+                                             for receipt in transfers], "receipt_key")
         self.transfer_table.setVisible(bool(transfers))
         self._buttons()
         if not self.busy:
@@ -562,21 +544,12 @@ class MainWindow(QMainWindow):
         students = self._students
         show_previous = self.show_previous_students.isChecked()
         visible = [p for p in students if p["eligible"] or show_previous]
-        old_person = self.selected(self.student_table)
-        self.student_table.blockSignals(True)
-        self.student_table.setUpdatesEnabled(False)
-        try:
-            self.student_table.selectionModel().clear()
-            self.student_table.setRowCount(len(visible))
-            for row, person in enumerate(visible):
-                programs = ", ".join(e["program"] for e in person["enrollments"] if e.get("program"))
-                status = "Temporary — check later" if person["is_provisional"] else "Current list" if person["eligible"] else "Previous list"
-                self._row(self.student_table, row, [person["student_id"] or "Unknown", person["username"] or "Unknown", full_name(person), programs, status], person)
-                if old_person and old_person["student_key"] == person["student_key"]:
-                    self.student_table.setCurrentCell(row, 0)
-        finally:
-            self.student_table.setUpdatesEnabled(True)
-            self.student_table.blockSignals(False)
+        rows = []
+        for person in visible:
+            programs = ", ".join(e["program"] for e in person["enrollments"] if e.get("program"))
+            status = "Temporary — check later" if person["is_provisional"] else "Current list" if person["eligible"] else "Previous list"
+            rows.append(([person["student_id"] or "Unknown", person["username"] or "Unknown", full_name(person), programs, status], person))
+        self.student_table.replace_records(rows, "student_key")
         self.student_table.setVisible(bool(visible))
         self.student_empty.setVisible(not visible)
         self.student_empty.setText("No students loaded. Import the official Excel list to begin." if not students else
@@ -613,17 +586,8 @@ class MainWindow(QMainWindow):
 
 
     @staticmethod
-    def _row(table, row, values, payload):
-        for column, value in enumerate(values):
-            item = QTableWidgetItem(value)
-            if column == 0:
-                item.setData(Qt.ItemDataRole.UserRole, payload)
-            table.setItem(row, column, item)
-
-    @staticmethod
     def selected(table):
-        row = table.currentRow()
-        return table.item(row, 0).data(Qt.ItemDataRole.UserRole) if row >= 0 and table.item(row, 0) else None
+        return table.selected_record()
 
     def _found_card(self):
         person = self.active["person"] if self.active else self.found

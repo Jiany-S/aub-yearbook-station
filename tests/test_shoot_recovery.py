@@ -243,6 +243,46 @@ service.ingest(CaptureEnvelope(key,sys.argv[2]))
     assert reopened.ingest(CaptureEnvelope(visit["session_key"],photo))["picture_number"] == 2
 
 
+@pytest.mark.parametrize("stage", ["before_publish", "after_publish"])
+def test_process_exit_recovers_a_linked_camera_original(station, photo, stage):
+    script = '''
+import os,sys
+from datetime import datetime
+from pathlib import Path
+from yearbook.service import StationService
+from yearbook.camera import CaptureEnvelope
+from yearbook.camera_inbox import CameraInbox
+import yearbook.service as module
+service=StationService(sys.argv[1])
+key=service.start_session(service.lookup("test1")["student_key"],identity_confirmed=True,capture_mode="canon")
+service.camera_session_ready(key)
+inbox=CameraInbox(service.root)
+data=Path(sys.argv[2]).read_bytes()
+receipt=inbox.reserve("DURABLE.JPG",len(data),"synthetic")
+source=inbox.path(receipt)
+source.write_bytes(data)
+inbox.received(receipt)
+inbox.bind(receipt,key,datetime(2026,11,30,10,0,1))
+if sys.argv[3]=="before_publish":
+    module.publish_file=lambda *args: os._exit(23)
+else:
+    service._mark_ready=lambda *args: os._exit(23)
+service.ingest(CaptureEnvelope(key,source,source_kind="canon",receipt_key=receipt["receipt_key"]))
+'''
+    result = subprocess.run([sys.executable, "-c", script, str(station.root), str(photo), stage], capture_output=True, timeout=30)
+    assert result.returncode == 23, result.stderr.decode()
+    pending = CameraInbox(station.root).receipts(pending_only=True)
+    assert len(pending) == 1 and CameraInbox(station.root).path(pending[0]).is_file()
+    reopened = StationService(station.root)
+    assert reopened.recover_interrupted() == {"recovered_assets": 1, "failed_assets": 0, "interrupted_sessions": 1}
+    visit = reopened.sessions()[0]
+    asset = reopened.assets(visit["session_key"])[0]
+    assert asset["status"] == "ready" and asset["picture_number"] == 1
+    assert checksum(safe_path(reopened.root,asset["relative_path"])) == checksum(photo)
+    assert not reopened.camera_transfers()
+    assert not CameraInbox(station.root).path(pending[0]).exists()
+
+
 def test_review_poll_does_not_read_every_assigned_receipt(shoot, monkeypatch):
     service, clock, connection = shoot
     connector, driver = connection()

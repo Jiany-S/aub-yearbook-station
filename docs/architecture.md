@@ -79,7 +79,12 @@ experimental Canon path accepts JPEG and requires a bound transfer receipt.
 It checks that the image decodes, reserves an asset UUID/sequence/path, copies to
 a partial file, flushes to disk, verifies source stability and SHA-256, records
 the staged checksum, publishes without replacing an existing file, then marks
-the asset ready. User-selected files outside the camera inbox are never deleted;
+the asset ready. For a session-bound Canon inbox capture, a hard link can stage
+the already-flushed original without rewriting the payload. The inbox name is
+retained until the final asset commit and receipt assignment; recovery uses the
+same verified partial/final journal states. Unsupported linking falls back to a
+copy and flush. The staged checksum must also match the transfer receipt.
+User-selected files outside the camera inbox are never deleted;
 verified camera intermediates are removed after asset commit. Filenames use the identity
 snapshot, event timezone, millisecond time, station code, session sequence, and a
 six-digit-minimum general picture number (`_P000001`). Schema v4 gives every

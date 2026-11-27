@@ -504,7 +504,7 @@ class StationService:
                 raise StationError("Canon camera capture currently accepts JPEG only.")
         else:
             receipt = inbox.for_source(source)
-        if receipt and receipt.get("sha256") and checksum(source) != receipt["sha256"]:
+        if capture.source_kind != "canon" and receipt and receipt.get("sha256") and checksum(source) != receipt["sha256"]:
             raise StationError("The camera transfer changed after download. Keep its file for review.")
         fingerprint = self.camera_fingerprint(receipt) if receipt and receipt.get("sha256") else None
         if fingerprint:
@@ -558,13 +558,28 @@ class StationService:
         temporary = destination.with_name(destination.name + ".partial")
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
-            with source.open("rb") as reader, temporary.open("xb") as writer:
-                shutil.copyfileobj(reader, writer, 1024 * 1024)
-                writer.flush()
-                os.fsync(writer.fileno())
+            linked = False
+            if capture.source_kind == "canon":
+                # The SDK's private inbox original is already flushed to disk.
+                # Keep that name until the final asset is committed, while using
+                # the same durable bytes for staging. User-selected files are
+                # always copied. Unsupported filesystems use the verified copy.
+                try:
+                    os.link(source, temporary)
+                    linked = True
+                except OSError:
+                    if temporary.exists():
+                        raise  # Never replace another staging file.
+            if not linked:
+                with source.open("rb") as reader, temporary.open("xb") as writer:
+                    shutil.copyfileobj(reader, writer, 1024 * 1024)
+                    writer.flush()
+                    os.fsync(writer.fileno())
             after = source.stat()
             digest = checksum(temporary)
-            if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns) or checksum(source) != digest:
+            if ((before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns)
+                    or checksum(source) != digest
+                    or (receipt and receipt.get("sha256") and digest != receipt["sha256"])):
                 raise StationError("The source photo changed during import. Keep it for review and try again after transfer completes.")
             with RosterStore(self.database) as store, atomic(store.connection):
                 store.connection.execute("UPDATE assets SET status='staged',sha256=?,byte_size=? WHERE asset_key=?", (digest, temporary.stat().st_size, key))

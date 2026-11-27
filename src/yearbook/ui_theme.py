@@ -8,7 +8,8 @@ from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
 
 
 def apply_theme(app):
-    app.setStyle("Fusion")
+    if app.style().objectName().casefold() != "fusion":
+        app.setStyle("Fusion")
     app.styleHints().setColorScheme(Qt.ColorScheme.Light)
     palette = QPalette()
     colors = {
@@ -23,7 +24,8 @@ def apply_theme(app):
         palette.setColor(getattr(QPalette.ColorRole, role), QColor(value))
     for role in ("WindowText", "Text", "ButtonText", "PlaceholderText"):
         palette.setColor(QPalette.ColorGroup.Disabled, getattr(QPalette.ColorRole, role), QColor("#70696b"))
-    app.setPalette(palette)
+    if app.palette() != palette:
+        app.setPalette(palette)
     if not app.property("yearbookFontsLoaded"):
         directory = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
         for name in ("segoeui.ttf", "segoeuib.ttf", "segoeuii.ttf", "tahoma.ttf"):
@@ -31,7 +33,9 @@ def apply_theme(app):
             if font.is_file():
                 QFontDatabase.addApplicationFont(str(font))
         app.setProperty("yearbookFontsLoaded", True)
-    app.setFont(QFont("Segoe UI", 10))
+    font = QFont("Segoe UI", 10)
+    if app.font() != font:
+        app.setFont(font)
 
 
 STYLE = """
@@ -69,7 +73,7 @@ QTabWidget::pane { background: #ffffff; border: none; border-top: 1px solid #e7e
 QTabBar::tab { background: #ffffff; color: #70696b; padding: 12px 20px; border: none; border-bottom: 2px solid transparent; }
 QTabBar::tab:hover { color: #650d1b; background: #faf7f5; }
 QTabBar::tab:selected { color: #650d1b; border-bottom: 2px solid #650d1b; font-weight: 600; }
-QTableWidget, QListWidget, QTextEdit, QTextBrowser { background: #ffffff; color: #292425; alternate-background-color: #faf8f6; border: 1px solid #e7e1df; selection-background-color: #f1e4e6; selection-color: #292425; }
+QTableView, QListWidget, QTextEdit, QTextBrowser { background: #ffffff; color: #292425; alternate-background-color: #faf8f6; border: 1px solid #e7e1df; selection-background-color: #f1e4e6; selection-color: #292425; }
 QListWidget#photoGrid { background: #faf9f7; border: none; padding: 8px; }
 QListWidget#photoGrid::item { padding: 8px; border: 1px solid transparent; }
 QListWidget#photoGrid::item:selected { background: #f1e4e6; border-color: #b58e97; }

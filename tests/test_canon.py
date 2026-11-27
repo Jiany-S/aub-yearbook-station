@@ -139,6 +139,69 @@ def test_delayed_photo_never_moves_to_the_next_student(camera):
     assert connector.service.active_session()["session_key"] == second
 
 
+def test_private_camera_transfer_does_not_copy_the_payload_again(camera, monkeypatch):
+    import yearbook.service as backend
+    connector, driver, clock = camera
+    key = begin(connector)
+    def unexpected_copy(*args, **kwargs):
+        raise AssertionError("The durable camera payload should not be rewritten")
+    monkeypatch.setattr(backend.shutil, "copyfileobj", unexpected_copy)
+    data = jpeg(driver.clock())
+    driver.pending.append(("ALREADY_DURABLE.JPG", data))
+    connector.poll()
+    assets = connector.service.assets(key)
+    assert len(assets) == 1 and assets[0]["status"] == "ready"
+    assert (connector.service.root / assets[0]["relative_path"]).read_bytes() == data
+    assert not connector.inbox.receipts(pending_only=True)
+
+
+def test_camera_transfer_falls_back_to_a_verified_copy_without_hardlinks(camera, monkeypatch):
+    import errno
+    import os
+    connector, driver, clock = camera
+    key = begin(connector)
+    original_link = os.link
+    def unsupported_link(source, target, *args, **kwargs):
+        if Path(source).name == "capture.jpg":
+            raise OSError(errno.EXDEV, "Synthetic filesystem cannot link this file")
+        return original_link(source, target, *args, **kwargs)
+    monkeypatch.setattr(os, "link", unsupported_link)
+    data = jpeg(driver.clock())
+    driver.pending.append(("FALLBACK.JPG", data))
+    connector.poll()
+    assets = connector.service.assets(key)
+    assert len(assets) == 1 and assets[0]["status"] == "ready"
+    assert (connector.service.root / assets[0]["relative_path"]).read_bytes() == data
+    assert not connector.inbox.receipts(pending_only=True)
+
+
+def test_staged_camera_bytes_must_still_match_the_download_receipt(camera, monkeypatch):
+    import os
+    connector, driver, clock = camera
+    key = begin(connector)
+    original_link = os.link
+    changed = []
+    def alter_staged_file(source, target, *args, **kwargs):
+        result = original_link(source, target, *args, **kwargs)
+        if Path(source).name == "capture.jpg":
+            before = Path(source).stat()
+            data = Path(source).read_bytes()
+            mutated = data.replace(b"2026:", b"2025:", 1)
+            assert mutated != data and len(mutated) == len(data)
+            Path(source).write_bytes(mutated)
+            os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+            changed.append(mutated)
+        return result
+    monkeypatch.setattr(os, "link", alter_staged_file)
+    driver.pending.append(("CHANGED_DURING_SAVE.JPG", jpeg(driver.clock())))
+    connector.poll()
+    assert changed
+    assert not any(a["status"] == "ready" for a in connector.service.assets(key))
+    receipt = connector.inbox.receipts(pending_only=True)[0]
+    assert receipt["state"] == "review" and "changed during import" in receipt["reason"]
+    assert connector.inbox.path(receipt).read_bytes() == changed[0]
+
+
 def test_pre_session_file_in_same_second_is_not_assigned(camera):
     connector, driver, clock = camera
     old = jpeg(driver.clock())

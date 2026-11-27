@@ -13,7 +13,7 @@ watcher. RAW import and other camera brands are later work.
 ## Install and launch
 
 1. Open [GitHub Releases](https://github.com/Jiany-S/aub-yearbook-station/releases).
-2. Download **AUBYearbookStation-0.8.2-Windows-x64-Setup.exe**.
+2. Download **AUBYearbookStation-0.9.0-Windows-x64-Setup.exe**.
 3. Run the setup and launch **AUB Yearbook Station** from the Start menu.
 
 Python and Microsoft Excel are not required. Installation is per Windows user

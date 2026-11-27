@@ -69,6 +69,9 @@ def test_import_preserves_original_bytes_and_names_burst_uniquely(station, photo
     assert safe_path(station.root, first["relative_path"]).read_bytes() == before == photo.read_bytes()
     assert first["sha256"] == checksum(photo)
     assert first["time_source"] == "provided"
+    photo.write_bytes(b"The operator changed their source file later")
+    assert safe_path(station.root, first["relative_path"]).read_bytes() == before
+    assert safe_path(station.root, second["relative_path"]).read_bytes() == before
     station.finish_session(key)
     assert station.sessions()[0]["state"] == "completed"
 
