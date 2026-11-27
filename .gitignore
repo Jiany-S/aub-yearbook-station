@@ -15,6 +15,7 @@ exports/
 *.xlsx
 *.csv
 *.jpg
+!src/yearbook/assets/yearbook-logo.jpg
 *.jpeg
 *.png
 *.cr2

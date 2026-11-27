@@ -13,7 +13,7 @@ watcher. RAW import and other camera brands are later work.
 ## Install and launch
 
 1. Open [GitHub Releases](https://github.com/Jiany-S/aub-yearbook-station/releases).
-2. Download **AUBYearbookStation-0.5.1-Windows-x64-Setup.exe**.
+2. Download **AUBYearbookStation-0.8.0-Windows-x64-Setup.exe**.
 3. Run the setup and launch **AUB Yearbook Station** from the Start menu.
 
 Python and Microsoft Excel are not required. Installation is per Windows user
@@ -198,3 +198,5 @@ modify its input file. GUI import also tracks current event eligibility.
 See [architecture](docs/architecture.md), [interface review](docs/ui-review.md),
 [release checklist](docs/release-checklist.md), and
 [third-party notices](THIRD_PARTY_NOTICES.md). Application source is MIT licensed.
+The supplied Campus Yearbook logo remains the property of AUB Campus Yearbook;
+see [branding source](src/yearbook/assets/SOURCE.md).

@@ -168,7 +168,8 @@ def test_camera_can_connect_after_the_student_has_started(qtbot, tmp_path, synth
     begin(qtbot, window)
     key = window.active["session_key"]
     assert window.camera_connect_button.isEnabled()
-    connect(qtbot, window)
+    qtbot.mouseClick(window.header_camera_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not window.busy and window.camera_connected, timeout=10000)
     assert window.active["session_key"] == key
     assert window.active["capture_mode"] == "canon" and not window.active["camera_paused"]
     assert not drivers[0].locked

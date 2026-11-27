@@ -37,6 +37,7 @@ def test_start_requires_explicit_identity_confirmation(window, qtbot):
     assert window.service.active_session()["person"]["username"] == "test1"
     assert not window.start_button.isEnabled()
     assert window.finish_button.isEnabled()
+    assert "Photographing" in window.banner.text()
 
 
 def test_search_is_locked_until_current_student_finishes(window, qtbot):

@@ -2,10 +2,10 @@
 
 HOW_TO_HTML = """
 <html><head><style>
-body { font-family: 'Segoe UI'; font-size: 11pt; color: #24303a; background: white; }
-h2 { color: #7f2639; font-size: 16pt; margin-top: 20px; }
+body { font-family: 'Segoe UI'; font-size: 11pt; color: #292425; background: white; }
+h2 { color: #650d1b; font-size: 16pt; margin-top: 20px; }
 h3 { font-size: 12pt; margin-bottom: 5px; }
-p, li { line-height: 145%; } li { margin-bottom: 13px; } a { color: #7f2639; }
+p, li { line-height: 145%; } li { margin-bottom: 13px; } a { color: #650d1b; }
 </style></head><body>
 <h2>How to use Yearbook Station</h2>
 <p>One event folder holds the whole shoot day. A student session is one visit
@@ -14,6 +14,8 @@ within that event. Prepare the laptop once, then repeat steps 3–6 for each stu
 connector is available under <b>Manage → Camera</b>. It requires Canon's official
 Windows x64 EDSDK and testing with your actual camera. Use <b>Try demo</b> to
 practice without a camera.</p>
+<p>After camera setup, use <b>Connect camera</b> in the top bar. If USB is
+interrupted, <b>Reconnect camera</b> continues the selected student's visit.</p>
 <ol>
 <li><h3>Set up the event</h3>Open <b>Photoshoot</b> and click <b>Set up event</b>.
 Enter the event name, such as Fall photoshoot, and a station code, such as ST01.

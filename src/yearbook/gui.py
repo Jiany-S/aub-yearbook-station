@@ -1,4 +1,4 @@
-"""Windows operator interface. Real camera capture remains intentionally unavailable."""
+"""Windows operator interface for student lookup and local photo capture."""
 
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ from .roster import load_roster
 from .service import StationError, StationService, safe_path
 from .help_content import HOW_TO_HTML
 from .ui_theme import STYLE, apply_theme
+from .branding import app_icon, wordmark
 
 
 def app_data() -> Path:
@@ -200,7 +201,8 @@ class MainWindow(QMainWindow):
         self._students = []
         self._sessions = []
         self.setWindowTitle(f"AUB Yearbook Station · {__version__}")
-        self.resize(1040, 640)
+        self.setWindowIcon(app_icon())
+        self.resize(1120, 740)
         self.setMinimumSize(720, 460)
         self._build()
         self.refresh()
@@ -214,28 +216,50 @@ class MainWindow(QMainWindow):
 
     def _build(self):
         container = QWidget()
+        container.setObjectName("appRoot")
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(16, 12, 16, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(20, 12, 20, 8)
+        layout.setSpacing(12)
+        masthead = QFrame()
+        masthead.setObjectName("masthead")
+        masthead_layout = QVBoxLayout(masthead)
+        masthead_layout.setContentsMargins(0, 0, 0, 0)
+        masthead_layout.setSpacing(10)
         top = QHBoxLayout()
+        top.setSpacing(20)
+        self.brand_logo = QLabel()
+        self.brand_logo.setAccessibleName("AUB Campus Yearbook logo")
+        self.brand_logo.setPixmap(wordmark())
+        self.brand_logo.setFixedSize(180, 62)
+        top.addWidget(self.brand_logo)
         brand = QVBoxLayout()
         brand.setSpacing(2)
-        brand.addWidget(label("AUB CAMPUS YEARBOOK", "eyebrow"))
-        self.heading = label("Yearbook Station", "heading")
+        brand.addWidget(label("AUB CAMPUS YEARBOOK", "brandCaption"))
+        self.heading = label("Photoshoot station", "heading")
         brand.addWidget(self.heading)
-        self.event_summary = label("", "muted")
-        brand.addWidget(self.event_summary)
         top.addLayout(brand, 1)
         self.camera_demo_button = button("Camera demo", self.open_camera_demo, "cameraDemo")
         top.addWidget(self.camera_demo_button)
         self.manage_button = button("Manage", self.show_management, "manageEvent")
         top.addWidget(self.manage_button)
-        layout.addLayout(top)
-        self.banner = label("Manual mode: add photos from this laptop.", "banner")
+        masthead_layout.addLayout(top)
+        context = QHBoxLayout()
+        self.event_summary = label("", "muted")
+        context.addWidget(self.event_summary, 1)
+        self.camera_summary = label("Camera not connected", "cameraSummary")
+        self.camera_summary.setWordWrap(False)
+        self.camera_summary.setMaximumWidth(270)
+        context.addWidget(self.camera_summary)
+        self.header_camera_button = button("Camera setup", self.header_camera_action, "headerCamera")
+        context.addWidget(self.header_camera_button)
+        masthead_layout.addLayout(context)
+        layout.addWidget(masthead)
+        self.banner = label("", "banner")
         layout.addWidget(self.banner)
         self.camera_demo_panel = QFrame()
+        self.camera_demo_panel.setObjectName("demoPanel")
         demo_layout = QVBoxLayout(self.camera_demo_panel)
-        demo_layout.setContentsMargins(0, 0, 0, 0)
+        demo_layout.setContentsMargins(12, 8, 12, 12)
         self.camera_demo_note = label("1. Import the Canon SDK ZIP. 2. Connect the camera by USB and choose JPEG. 3. Connect camera, then start a test student.", "nextStep")
         demo_layout.addWidget(self.camera_demo_note)
         demo_actions = QHBoxLayout()
@@ -428,22 +452,24 @@ class MainWindow(QMainWindow):
         self.active = next((s for s in sessions if s["state"] in ("active", "draining")), None)
         self.resume_candidate = next((s for s in sessions if s["state"] == "needs-review" and s.get("interrupted")), None)
         count = sum(p["eligible"] for p in students)
-        self.heading.setText("Yearbook Station")
+        self.heading.setText("Camera demo" if config.get("is_camera_demo") else "Photoshoot station")
         student_label = "student" if count == 1 else "students"
         self.event_summary.setText(f"{config['event_name'] or 'New event'} · {config['station_code']} · {count} {student_label}")
         if config.get("is_camera_demo"):
-            banner = (f"CAMERA DEMO · {self.camera_name} connected. Use the test buttons below."
-                      if self.camera_connected else "CAMERA DEMO · Sample students, separate photos and picture counter. Use the test buttons below.")
+            banner = (f"Camera demo · {self.camera_name} connected"
+                      if self.camera_connected else "Camera demo · Sample students and separate photo storage")
         elif config["is_demo"]:
-            banner = "DEMO · Sample students only. Add sample photos to practice."
+            banner = "Sample-photo demo · No camera required"
         elif self.camera_connected:
-            banner = f"{self.camera_name} connected · JPEG photos transfer automatically during the active session."
+            banner = "Ready for the next student · Camera connected" if not self.active else "Photographing · Photos save automatically"
         elif self.active and self.active["capture_mode"] == "canon":
-            banner = "Camera paused · The same student and folder are still selected. Reconnect to continue."
+            banner = "Camera paused · Keep this student selected and reconnect to continue"
+        elif self.active:
+            banner = "Photographing · Add this student's photos"
         else:
-            banner = "Manual mode: add photos from this laptop. Connect a Canon camera under Manage → Camera."
+            banner = "Find a student to begin" if config["event_name"] else "Set up an event, then import the student list"
         if config.get("is_camera_test") and not config.get("is_camera_demo"):
-            banner = "CAMERA TEST · Separate practice event and picture counter. " + banner
+            banner = "Practice event · " + banner
         self.banner.setText(banner)
         configured = bool(config["event_name"])
         self.camera_demo_panel.setVisible(bool(config.get("is_camera_demo")))
@@ -468,7 +494,7 @@ class MainWindow(QMainWindow):
             if config.get("is_camera_demo"):
                 self.photo_empty.setText("Connect camera, then Start test student.\nYour test photos will appear here.")
             self.photo_stack.setCurrentIndex(0)
-            self.photo_hint.setText("New filenames include the laptop's general picture number.")
+            self.photo_hint.setText("Original files and picture numbers are saved locally.")
         self._found_card()
         old_person = self.selected(self.student_table)
         self.student_table.blockSignals(True)
@@ -536,12 +562,12 @@ class MainWindow(QMainWindow):
         self._photos(active["session_key"])
         self._found_card()
         self.camera_status.setText(self.camera_message)
-        note = (f"{self.camera_name} connected · Photos save under the current student."
-                if self.camera_connected else "Camera paused · The same student and folder are still selected. Reconnect to continue.")
+        note = ("Photographing · Camera connected · Photos save automatically"
+                if self.camera_connected else "Camera paused · Keep this student selected and reconnect to continue")
         if self._config.get("is_camera_demo"):
-            note = "CAMERA DEMO · " + note
+            note = "Camera demo · " + note
         elif self._config.get("is_camera_test"):
-            note = "CAMERA TEST · " + note
+            note = "Practice event · " + note
         transfers = self.service.camera_transfers()
         if transfers:
             note += f" · {len(transfers)} transfer(s) need review under Manage → Camera."
@@ -568,12 +594,13 @@ class MainWindow(QMainWindow):
             if self._config.get("is_camera_demo"):
                 self.student_card.setText("<h3>Sample test student</h3><p>Click Start test student above. Sample details fill in automatically; no real student ID is needed.</p>")
                 return
-            self.student_card.setText("<h3>Check the student's details</h3><p>Their name and program will appear here after you click Find.</p>")
+            self.student_card.setText("<h3>No student selected</h3><p>Find a student by AUB ID or email username.</p>")
             return
         programs = "<br>".join(html.escape(" · ".join(e.get(k, "") for k in ("program", "faculty", "level") if e.get(k))) for e in person["enrollments"])
         arabic = " ".join(person.get(k, "") for k in ("arabic_first_name", "arabic_middle_name", "arabic_last_name") if person.get(k))
         status = "Photographing now" if self.active else "Temporary record — check later" if person["is_provisional"] else "Current student list" if person.get("eligible", True) else "Not on the current list"
-        self.student_card.setText(f"<h3>{html.escape(full_name(person))}</h3><p>{html.escape(arabic)}</p><p><b>AUB ID:</b> {html.escape(person['student_id'] or 'Unknown')}<br><b>Username:</b> {html.escape(person['username'] or 'Unknown')}</p><p>{programs}</p><p><b>{status}</b></p>")
+        arabic_line = f"<p>{html.escape(arabic)}</p>" if arabic else ""
+        self.student_card.setText(f"<p style='font-size:18px; font-weight:600'>{html.escape(full_name(person))}</p>{arabic_line}<p><b>AUB ID</b> &nbsp; {html.escape(person['student_id'] or 'Unknown')}<br><b>Username</b> &nbsp; {html.escape(person['username'] or 'Unknown')}</p><p>{programs}</p><p style='color:#650d1b'>{status}</p>")
 
 
     def _buttons(self):
@@ -581,14 +608,14 @@ class MainWindow(QMainWindow):
         config = self._config
         operational = bool(config["event_name"]) and any(p["eligible"] for p in self._students)
         eligible = bool(self.found) and self.found.get("eligible", True)
-        self.start_button.setVisible(idle)
+        self.start_button.setVisible(idle and bool(self.found))
         self.start_button.setText("Resume student" if self.pending_resume else "Start session")
         self.resume_button.setVisible(idle and bool(self.resume_candidate) and not self.pending_resume)
         self.resume_button.setEnabled(ready and idle)
         if self.resume_candidate:
             self.resume_button.setText(f"Resume unfinished student ({self.resume_candidate['photo_count']} saved photos)")
         self.finish_button.setVisible(not idle)
-        self.confirm.setVisible(idle)
+        self.confirm.setVisible(idle and bool(self.found))
         self.provisional_button.setVisible(idle)
         self.start_button.setEnabled(ready and idle and operational and eligible and self.confirm.isChecked())
         self.confirm.setEnabled(ready and idle and eligible)
@@ -614,6 +641,16 @@ class MainWindow(QMainWindow):
         self.provisional_button.setEnabled(ready and idle)
         self.manage_button.setEnabled(ready)
         in_camera_demo = bool(config.get("is_camera_demo"))
+        self.camera_summary.setVisible(not in_camera_demo)
+        self.camera_summary.setText(f"{self.camera_name} · Connected" if self.camera_connected else "Camera paused" if camera_paused else "Camera not connected")
+        self.header_camera_button.setVisible(not in_camera_demo and not config["is_demo"])
+        self.header_camera_button.setEnabled(ready)
+        self.header_camera_button.setText("Disconnect" if self.camera_connected else "Reconnect camera" if camera_paused else "Connect camera" if operational and self.sdk_path.text() else "Camera setup")
+        if self.banner.property("active") != bool(self.active):
+            self.banner.setProperty("active", bool(self.active))
+            self.banner.style().unpolish(self.banner)
+            self.banner.style().polish(self.banner)
+        self.capture_heading.setText("STUDENT")
         self.camera_demo_button.setText("Leave camera demo" if in_camera_demo else "Camera demo")
         self.camera_demo_button.setEnabled(ready and idle and not self.camera_connected)
         self.demo_sdk_button.setEnabled(ready and idle and not self.camera_connected)
@@ -623,7 +660,7 @@ class MainWindow(QMainWindow):
         self.demo_capture_button.setText("Finish test student" if self.active else "Start test student")
         self.demo_folder_button.setEnabled(ready)
         if in_camera_demo:
-            self.capture_heading.setText("1. Sample test student")
+            self.capture_heading.setText("SAMPLE STUDENT")
             for widget in (self.search, self.search_button, self.search_feedback, self.confirm,
                            self.start_button, self.finish_button, self.provisional_button):
                 widget.hide()
@@ -695,13 +732,13 @@ class MainWindow(QMainWindow):
             if item is None:
                 item = QListWidgetItem()
                 self.photos.addItem(item)
-            item.setText(f"{title}\n{status}")
+            item.setText(f"{title} · {status}")
             item.setData(Qt.ItemDataRole.UserRole, asset)
             item.setToolTip(asset["relative_path"] + ("\n" + asset["error_text"] if asset["error_text"] else ""))
             if asset["status"] == "ready":
                 reader = QImageReader(str(safe_path(self.root, asset["relative_path"])))
                 reader.setAutoTransform(True)
-                reader.setScaledSize(reader.size().scaled(QSize(120, 130), Qt.AspectRatioMode.KeepAspectRatio))
+                reader.setScaledSize(reader.size().scaled(self.photos.iconSize(), Qt.AspectRatioMode.KeepAspectRatio))
                 image = reader.read()
                 if not image.isNull():
                     item.setIcon(QIcon(QPixmap.fromImage(image)))
@@ -1129,6 +1166,15 @@ class MainWindow(QMainWindow):
             return
         self.camera_action("connect", self.sdk_path.text())
 
+    def header_camera_action(self):
+        if self.camera_connected:
+            self.disconnect_camera()
+        elif self.sdk_path.text() and self._config["event_name"] and any(p["eligible"] for p in self._students):
+            self.connect_camera()
+        else:
+            self.manage_tabs.setCurrentIndex(2)
+            self.show_management()
+
     def disconnect_camera(self):
         self.camera_action("disconnect")
 
@@ -1239,11 +1285,11 @@ class MainWindow(QMainWindow):
     def _capture_controls(self):
         page = QWidget()
         layout = QHBoxLayout(page)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(16)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(24)
         left = QVBoxLayout()
         left.setSpacing(7)
-        self.capture_heading = label("1. Find and confirm the student", "eyebrow")
+        self.capture_heading = label("STUDENT", "eyebrow")
         left.addWidget(self.capture_heading)
         self.search = QLineEdit()
         self.search.setObjectName("studentSearch")
@@ -1271,21 +1317,23 @@ class MainWindow(QMainWindow):
         self.confirm.toggled.connect(self._buttons)
         left.addWidget(self.confirm)
         self.start_button = button("Start session", self.start, "startSession", True)
-        self.finish_button = button("Finish and next student", self.finish, "finishSession")
+        self.finish_button = button("Finish and next student", self.finish, "finishSession", True)
         left.addWidget(self.start_button)
-        left.addWidget(self.finish_button)
         self.next_step = label("", "nextStep")
         left.addWidget(self.next_step)
         self.provisional_button = button("Student not listed?", self.provisional)
         left.addWidget(self.provisional_button)
         left.addStretch()
-        left_widget = QWidget()
+        left_widget = QFrame()
+        left_widget.setObjectName("studentPanel")
         left_widget.setLayout(left)
-        left_widget.setMinimumWidth(275)
-        left_widget.setMaximumWidth(365)
+        left.setContentsMargins(0, 0, 20, 0)
+        left_widget.setMinimumWidth(300)
+        left_widget.setMaximumWidth(360)
         layout.addWidget(left_widget, 1)
         right = QVBoxLayout()
-        right.addWidget(label("2. Add photos, then finish", "eyebrow"))
+        right.setSpacing(8)
+        right.addWidget(label("PHOTOS", "eyebrow"))
         self.active_card = label("Student photos", "activeCard")
         right.addWidget(self.active_card)
         actions = QHBoxLayout()
@@ -1308,14 +1356,17 @@ class MainWindow(QMainWindow):
         self.photos.setObjectName("photoGrid")
         self.photos.setViewMode(QListView.ViewMode.IconMode)
         self.photos.setResizeMode(QListView.ResizeMode.Adjust)
-        self.photos.setIconSize(QSize(120, 130))
-        self.photos.setGridSize(QSize(152, 175))
+        self.photos.setIconSize(QSize(148, 156))
+        self.photos.setGridSize(QSize(180, 220))
         self.photos.setWordWrap(True)
         self.photos.itemDoubleClicked.connect(self.open_photo)
         self.photo_stack.addWidget(self.photos)
         right.addWidget(self.photo_stack, 1)
         self.photo_hint = label("", "muted")
-        right.addWidget(self.photo_hint)
+        footer = QHBoxLayout()
+        footer.addWidget(self.photo_hint, 1)
+        footer.addWidget(self.finish_button)
+        right.addLayout(footer)
         layout.addLayout(right, 2)
         return page
 
@@ -1383,6 +1434,7 @@ def self_test(report: Path, screenshot: Path | None = None) -> int:
     with tempfile.TemporaryDirectory() as folder, ExitStack() as cleanup:
         window = MainWindow(Path(folder) / "demo")
         cleanup.callback(window.workspace_lock.unlock)
+        assert not window.brand_logo.pixmap().isNull()
         window.service.seed_demo()
         window.refresh()
         window.search.setText("demo1")

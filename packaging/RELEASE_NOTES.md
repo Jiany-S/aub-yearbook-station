@@ -1,5 +1,14 @@
 Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
 
+New in 0.8.0: the supplied **AUB Campus Yearbook logo** and burgundy branding are
+included offline. The photoshoot screen uses a plain white layout, a clearer
+student panel, larger photo previews, and **Finish and next student** beside the
+photos. Identity confirmation and Start appear when a student has been found.
+Camera connection and reconnection are directly available in the header, with
+shorter status messages. The step-by-step How to use guide remains one tab away.
+Install over the existing version; event folders, originals, and numbering are
+preserved.
+
 New in 0.7.0: **Camera demo** is visible in the top bar, including first launch.
 It opens five sample students with a separate picture counter, guided connection
 steps, one-click test-student start/finish, and Open demo photos. Real roster

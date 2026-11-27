@@ -10,7 +10,7 @@ try {
     # Restrict binary discovery to this Python installation and Windows. Other
     # tools may put incompatible ICU/UCRT DLLs on the developer's global PATH.
     $env:PATH = @((Split-Path -Parent $pythonInfo.executable),$pythonInfo.base,(Join-Path $pythonInfo.base 'DLLs'),"$env:SystemRoot\System32",$env:SystemRoot,"$env:SystemRoot\System32\Wbem","$env:SystemRoot\System32\WindowsPowerShell\v1.0") -join ';'
-    & $pythonInfo.executable -m PyInstaller --noconfirm --clean --windowed --onedir --name AUBYearbookStation --paths src --hidden-import xlrd --hidden-import openpyxl --collect-data tzdata --copy-metadata PySide6-Essentials --add-data "LICENSE:." --add-data "THIRD_PARTY_NOTICES.md:." --add-data "build/thirdparty:thirdparty" packaging/launch.py
+    & $pythonInfo.executable -m PyInstaller --noconfirm --clean --windowed --onedir --name AUBYearbookStation --paths src --hidden-import xlrd --hidden-import openpyxl --collect-data tzdata --copy-metadata PySide6-Essentials --add-data "LICENSE:." --add-data "THIRD_PARTY_NOTICES.md:." --add-data "build/thirdparty:thirdparty" --add-data "src/yearbook/assets:yearbook/assets" packaging/launch.py
     $freezeResult = $LASTEXITCODE
 } finally {
     $env:PATH = $originalBuildPath
