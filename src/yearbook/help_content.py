@@ -46,6 +46,11 @@ drive. Wait for confirmation. The ZIP includes the student information and saved
 photos, so keep it in your team's private storage.</li>
 </ol>
 <h2>When something needs attention</h2>
+<p><b>Previous student lists?</b> <b>Students</b> shows only the current list by
+default. Tick <b>Show previous lists</b> to view older records. Previous students
+cannot be chosen for new photos or found through Photoshoot search. Their saved
+photos and visits remain available in <b>Manage → History</b>. Manually added
+temporary records remain available for students missing from the current list.</p>
 <p><b>First camera test / photography company demo?</b> Click <b>Camera demo</b>
 in the top bar. It provides five sample students with a separate picture counter;
 you do not need an Excel list. Click <b>Import SDK ZIP</b> and select Canon's

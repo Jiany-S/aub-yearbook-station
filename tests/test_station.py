@@ -147,6 +147,9 @@ def test_current_roster_eligibility_does_not_erase_history(station):
     station.finish_session(key)
     station.import_roster(parse_rows([["ID", "FIRST LATEST", "LAST LATEST", "EMAIL"], ["202600002", "Test", "Two", "test2@mail.aub.edu"]]))
     assert not station.lookup("test1")["eligible"]
+    for query in ("test1", "202600001", "test1@mail.aub.edu"):
+        assert station.lookup(query, current_only=True) is None
+    assert station.lookup("test2", current_only=True) == station.lookup("test2")
     assert len(station.sessions()) == 1
     with pytest.raises(StationError, match="not in the current roster"):
         start(station)
@@ -158,6 +161,19 @@ def test_provisional_without_id_never_invents_an_aub_id(station):
     assert person["is_provisional"]
     key = station.start_session(person["student_key"], identity_confirmed=True)
     assert station.active_session()["session_key"] == key
+
+
+def test_previous_identifier_cannot_conflict_with_a_current_lookup(station):
+    station.import_roster(parse_rows([
+        ["ID", "FIRST LATEST", "LAST LATEST", "EMAIL"],
+        ["202600003", "Synthetic", "Current", "202600001@mail.aub.edu"],
+    ]))
+    # This query is the previous student's ID and the current student's username.
+    # Archived records must not participate in capture-time lookup ambiguity.
+    current = station.lookup("202600001", current_only=True)
+    assert current["student_id"] == "202600003" and current["eligible"]
+    assert station.lookup("202600003", current_only=True) == current
+    assert station.lookup("202600001@mail.aub.edu", current_only=True) == current
 
 
 def test_official_roster_reconciles_username_only_provisional(station):

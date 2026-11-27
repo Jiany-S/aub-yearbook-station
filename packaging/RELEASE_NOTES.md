@@ -1,5 +1,12 @@
 Windows preview of AUB Yearbook Station with an experimental Canon USB connector.
 
+New in 0.8.2: **Students** defaults to the current roster. **Show previous lists**
+opens older records for viewing without enabling them for new photography.
+Photoshoot search excludes previous lists, and unfinished-visit prompts show
+only current students. Starting or resuming a session still checks eligibility
+in the database. Saved photos, student keys, historical visits, and general picture
+numbers are preserved. Temporary students can still be added for later review.
+
 New in 0.8.1: Excel imports accept AUB's underscore-separated export headings,
 including First_Latest and Shrdgmr_Program_1, while continuing to support the
 older format. The chosen worksheet is named in the confirmation. Import stages

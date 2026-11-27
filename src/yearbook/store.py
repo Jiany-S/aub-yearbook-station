@@ -214,18 +214,20 @@ class RosterStore(AbstractContextManager):
         ).fetchone()
         return self.person(row) if row else None
 
-    def find_student(self, query: str) -> dict | None:
+    def find_student(self, query: str, *, current_only: bool = False) -> dict | None:
         query = query.strip().casefold()
         if not query:
             return None
+        eligibility = (" AND student_key IN (SELECT student_key FROM roster_membership WHERE eligible=1)"
+                       if current_only else "")
         if "@" in query:
             rows = self.connection.execute(
-                "SELECT * FROM students WHERE provisional != 2 AND json_extract(payload_json,'$.email')=?",
+                "SELECT * FROM students WHERE provisional != 2" + eligibility + " AND json_extract(payload_json,'$.email')=?",
                 (query,),
             ).fetchall()
         else:
             rows = self.connection.execute(
-                "SELECT * FROM students WHERE provisional != 2 AND (student_id=? OR username=?)",
+                "SELECT * FROM students WHERE provisional != 2" + eligibility + " AND (student_id=? OR username=?)",
                 (query, query),
             ).fetchall()
         if len(rows) > 1:

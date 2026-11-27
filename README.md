@@ -13,7 +13,7 @@ watcher. RAW import and other camera brands are later work.
 ## Install and launch
 
 1. Open [GitHub Releases](https://github.com/Jiany-S/aub-yearbook-station/releases).
-2. Download **AUBYearbookStation-0.8.1-Windows-x64-Setup.exe**.
+2. Download **AUBYearbookStation-0.8.2-Windows-x64-Setup.exe**.
 3. Run the setup and launch **AUB Yearbook Station** from the Start menu.
 
 Python and Microsoft Excel are not required. Installation is per Windows user
@@ -39,6 +39,10 @@ station code and operator. Then choose **Import students**.
   including `First_Latest` and `Shrdgmr_Program_1`. Reading and validation run in
   the background with a visible progress indicator; the student list refreshes
   once after the import is saved.
+  **Students** shows the current roster by default. **Show previous lists** is
+  for viewing older records; it does not make them eligible for photography.
+  Photoshoot lookup and session start/resume use current eligibility. Manually
+  added temporary students remain available for the missing-student workflow.
 - In **Photoshoot**, find the student by ID or username, check the details with
   them, tick **These details match the student**, then select **Start session**.
 - Use **Add photos** to copy JPEG, PNG, or TIFF files into the active

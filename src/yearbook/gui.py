@@ -340,6 +340,10 @@ class MainWindow(QMainWindow):
         for widget in (self.import_button, self.use_button, self.reconcile_button):
             actions.addWidget(widget)
         actions.addStretch()
+        self.show_previous_students = QCheckBox("Show previous lists")
+        self.show_previous_students.setObjectName("showPreviousStudents")
+        self.show_previous_students.toggled.connect(self.refresh_student_table)
+        actions.addWidget(self.show_previous_students)
         layout.addLayout(actions)
         self.roster_note = label("", "muted")
         layout.addWidget(self.roster_note)
@@ -464,7 +468,8 @@ class MainWindow(QMainWindow):
         sessions = self.service.sessions()
         self._config, self._students, self._sessions = config, students, sessions
         self.active = next((s for s in sessions if s["state"] in ("active", "draining")), None)
-        self.resume_candidate = next((s for s in sessions if s["state"] == "needs-review" and s.get("interrupted")), None)
+        current_keys = {p["student_key"] for p in students if p["eligible"]}
+        self.resume_candidate = next((s for s in sessions if s["state"] == "needs-review" and s.get("interrupted") and s["student_key"] in current_keys), None)
         count = sum(p["eligible"] for p in students)
         self.heading.setText("Camera demo" if config.get("is_camera_demo") else "Photoshoot station")
         student_label = "student" if count == 1 else "students"
@@ -510,19 +515,7 @@ class MainWindow(QMainWindow):
             self.photo_stack.setCurrentIndex(0)
             self.photo_hint.setText("Original files and picture numbers are saved locally.")
         self._found_card()
-        old_person = self.selected(self.student_table)
-        self.student_table.blockSignals(True)
-        self.student_table.setRowCount(len(students))
-        for row, person in enumerate(students):
-            programs = ", ".join(e["program"] for e in person["enrollments"] if e.get("program"))
-            status = "Temporary — check later" if person["is_provisional"] else "Current list" if person["eligible"] else "Previous list"
-            self._row(self.student_table, row, [person["student_id"] or "Unknown", person["username"] or "Unknown", full_name(person), programs, status], person)
-            if old_person and old_person["student_key"] == person["student_key"]:
-                self.student_table.setCurrentCell(row, 0)
-        self.student_table.blockSignals(False)
-        self.student_table.setVisible(bool(students))
-        self.student_empty.setVisible(not students)
-        self.roster_note.setText(f"Students on list: {count} · Temporary records: {sum(p['is_provisional'] for p in students)}")
+        self.refresh_student_table()
         old_session = self.selected(self.session_table)
         self.session_table.blockSignals(True)
         self.session_table.setRowCount(len(sessions))
@@ -564,6 +557,36 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Session active. Add this student's photos, then finish.")
             else:
                 self.statusBar().showMessage("Find a student to begin the next session.")
+
+    def refresh_student_table(self):
+        students = self._students
+        show_previous = self.show_previous_students.isChecked()
+        visible = [p for p in students if p["eligible"] or show_previous]
+        old_person = self.selected(self.student_table)
+        self.student_table.blockSignals(True)
+        self.student_table.setUpdatesEnabled(False)
+        try:
+            self.student_table.selectionModel().clear()
+            self.student_table.setRowCount(len(visible))
+            for row, person in enumerate(visible):
+                programs = ", ".join(e["program"] for e in person["enrollments"] if e.get("program"))
+                status = "Temporary — check later" if person["is_provisional"] else "Current list" if person["eligible"] else "Previous list"
+                self._row(self.student_table, row, [person["student_id"] or "Unknown", person["username"] or "Unknown", full_name(person), programs, status], person)
+                if old_person and old_person["student_key"] == person["student_key"]:
+                    self.student_table.setCurrentCell(row, 0)
+        finally:
+            self.student_table.setUpdatesEnabled(True)
+            self.student_table.blockSignals(False)
+        self.student_table.setVisible(bool(visible))
+        self.student_empty.setVisible(not visible)
+        self.student_empty.setText("No students loaded. Import the official Excel list to begin." if not students else
+                                   "No students on the current list. Import the official Excel list to begin.")
+        current = sum(p["eligible"] for p in students)
+        note = f"Current list: {current} · Temporary records: {sum(p['is_provisional'] and p['eligible'] for p in students)}"
+        if show_previous:
+            note += f" · Previous lists: {len(students) - current} (view only)"
+        self.roster_note.setText(note)
+        self._buttons()
 
     def refresh_capture(self):
         """A camera burst need not rebuild the roster and all historical visits."""
@@ -706,7 +729,8 @@ class MainWindow(QMainWindow):
                 widget.style().unpolish(widget)
                 widget.style().polish(widget)
         person = self.selected(self.student_table)
-        self.use_button.setEnabled(ready and idle and bool(person))
+        self.show_previous_students.setEnabled(ready)
+        self.use_button.setEnabled(ready and idle and bool(person) and person["eligible"])
         self.reconcile_button.setEnabled(ready and idle and bool(person) and person["is_provisional"])
         session = self.selected(self.session_table)
         self.review_button.setEnabled(ready and idle and bool(session) and session["state"] == "needs-review")
@@ -811,12 +835,12 @@ class MainWindow(QMainWindow):
         def operation():
             self.pending_resume = None
             query = self.search.text().strip()
-            self.found = self.service.lookup(query) if query else None
+            self.found = self.service.lookup(query, current_only=True) if query else None
             self.confirm.setChecked(False)
             if not query:
                 self.search_feedback.setText("Enter an ID or username first.")
             elif not self.found:
-                self.search_feedback.setText("No match. Check the ID, or choose Student not listed below.")
+                self.search_feedback.setText("No match on the current list. Check the ID or username.")
             else:
                 self.search_feedback.setText("")
             self._found_card()
@@ -953,7 +977,7 @@ class MainWindow(QMainWindow):
         if self.active or self.busy:
             return
         person = self.selected(self.student_table)
-        if person:
+        if person and person["eligible"]:
             self.found = person
             self.search.setText(person["username"] or person["student_id"])
             self.confirm.setChecked(False)
@@ -971,7 +995,7 @@ class MainWindow(QMainWindow):
         query, accepted = QInputDialog.getText(self, "Match temporary student", "AUB ID or username from the official student list")
         if not accepted:
             return
-        target = self.guarded(lambda: self.service.lookup(query))
+        target = self.guarded(lambda: self.service.lookup(query, current_only=True))
         if not target or target["is_provisional"]:
             self.error("Enter the ID or username of a student on the official list.")
             return

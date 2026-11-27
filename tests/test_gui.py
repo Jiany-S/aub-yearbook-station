@@ -273,6 +273,51 @@ def test_context_actions_require_the_relevant_selection(window):
     assert window.reconcile_button.isEnabled()
 
 
+def test_previous_roster_is_hidden_and_cannot_be_used_for_a_new_shoot(window, photo):
+    from yearbook.camera import CaptureEnvelope
+    from yearbook.roster import parse_rows
+    from yearbook.service import StationError
+
+    old_student = window.service.lookup("test1")
+    visit = window.service.start_session(old_student["student_key"], identity_confirmed=True)
+    asset = window.service.ingest(CaptureEnvelope(visit, photo))
+    # A prior unfinished visit must remain in History without becoming a resume
+    # candidate for a student excluded from the newly imported list.
+    window.service.recover_interrupted()
+    window.student_table.selectRow(0)
+    window.service.import_roster(parse_rows([
+        ["ID", "FIRST LATEST", "LAST LATEST", "EMAIL"],
+        ["202600002", "Test", "Two", "test2@mail.aub.edu"],
+    ]))
+    window.refresh()
+    assert not window.show_previous_students.isChecked()
+    assert window.student_table.rowCount() == 1
+    assert window.student_table.item(0, 1).text() == "test2"
+    assert window.selected(window.student_table) is None
+    assert not window.use_button.isEnabled()
+    assert window.session_table.rowCount() == 1
+    assert not window.resume_button.isVisible()
+    assert "Current list: 1" in window.roster_note.text()
+    window.search.setText("test1")
+    window.lookup()
+    assert window.found is None and not window.start_button.isEnabled()
+    assert "current list" in window.search_feedback.text()
+    window.show_previous_students.setChecked(True)
+    assert window.student_table.rowCount() == 2
+    window.student_table.selectRow(0)
+    assert not window.use_button.isEnabled()
+    window.use_selected()
+    assert window.found is None
+    assert not window.service.lookup("test1")["eligible"]
+    with pytest.raises(StationError, match="not in the current roster"):
+        window.service.resume_session(visit, identity_confirmed=True)
+    window.show_previous_students.setChecked(False)
+    assert window.student_table.rowCount() == 1
+    assert window.selected(window.student_table) is None
+    assert window.service.assets(visit)[0] == asset
+    assert (window.root / asset["relative_path"]).read_bytes() == photo.read_bytes()
+
+
 def test_small_window_keeps_primary_actions_reachable(window, qtbot):
     window.resize(800, 540)
     qtbot.wait(20)

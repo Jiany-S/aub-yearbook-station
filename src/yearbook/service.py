@@ -130,14 +130,16 @@ class StationService:
             ).fetchall()
             return [{**store.person(r), "eligible": bool(r["eligible"])} for r in rows if not provisional_only or r["provisional"] == 1]
 
-    def lookup(self, query: str) -> dict | None:
+    def lookup(self, query: str, *, current_only: bool = False) -> dict | None:
         with RosterStore(self.database, read_only=True) as store:
-            person = store.find_student(query)
+            person = store.find_student(query, current_only=current_only)
             if person:
                 membership = store.connection.execute(
                     "SELECT eligible FROM roster_membership WHERE student_key=?", (person["student_key"],)
                 ).fetchone()
                 person["eligible"] = bool(membership and membership[0])
+                if current_only and not person["eligible"]:
+                    return None
             return person
 
     def create_provisional(self, full_name: str, student_id: str = "", username: str = "", notes: str = "") -> dict:
